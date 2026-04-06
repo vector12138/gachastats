@@ -1,0 +1,463 @@
+#!/usr/bin/env python3
+"""
+GachaStats 主服务
+米哈游全游戏抽卡数据分析工具
+"""
+import os
+import sys
+import re
+import json
+import requests
+from datetime import datetime
+from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+from typing import List, Optional, Dict, Any
+import sqlite3
+
+# 导入统一日志配置
+from logging_config import setup_logging
+
+# 初始化日志系统
+logger = setup_logging()
+# 初始化FastAPI
+app = FastAPI(
+    title="GachaStats API",
+    description="米哈游全游戏抽卡数据分析工具",
+    version="1.0.0"
+)
+# 静态文件和前端页面
+app.mount("/static", StaticFiles(directory="../static"), name="static")
+# 数据库初始化
+def init_db():
+    conn = sqlite3.connect("../data/gachastats.db")
+    cursor = conn.cursor()
+    # 账号表
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        game_type TEXT NOT NULL,
+        account_name TEXT NOT NULL,
+        server TEXT NOT NULL,
+        uid TEXT NOT NULL,
+        auth_key TEXT,
+        last_sync_time TIMESTAMP,
+        create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(game_type, uid)
+    )
+    ''')
+    # 抽卡记录表
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS gacha_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id INTEGER,
+        gacha_type TEXT NOT NULL,
+        gacha_name TEXT NOT NULL,
+        item_name TEXT NOT NULL,
+        item_type TEXT NOT NULL,
+        rarity INTEGER NOT NULL,
+        time TIMESTAMP NOT NULL,
+        pity INTEGER DEFAULT 0,
+        is_new BOOLEAN DEFAULT 0,
+        FOREIGN KEY (account_id) REFERENCES accounts (id),
+        UNIQUE(account_id, gacha_type, time, item_name)
+    )
+    ''')
+    # 游戏基础数据
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS game_data (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        game_type TEXT NOT NULL,
+        item_type TEXT NOT NULL,
+        item_name TEXT NOT NULL,
+        rarity INTEGER NOT NULL,
+        icon_url TEXT,
+        UNIQUE(game_type, item_name)
+    )
+    ''')
+    conn.commit()
+    conn.close()
+init_db()
+# 数据模型
+class AccountCreate(BaseModel):
+    game_type: str # genshin/zzz/starrail/honkai3
+    account_name: str
+    server: str
+    uid: str
+    auth_key: str = ""
+class GachaRecordImport(BaseModel):
+    account_id: int
+    records: List[Dict[str, Any]]
+class GachaAnalysisRequest(BaseModel):
+    account_id: int
+    gacha_type: Optional[str] = None
+# 工具函数
+def parse_gacha_url(url: str) -> Dict[str, str]:
+    """解析抽卡记录链接，提取authkey等参数"""
+    params = {}
+    if "?" in url:
+        query_string = url.split("?")[1]
+        for param in query_string.split("&"):
+            if "=" in param:
+                key, value = param.split("=", 1)
+                params[key] = value
+    return params
+def fetch_gacha_records(game_type: str, auth_key: str, gacha_type: str, end_id: str = "0") -> List[Dict]:
+    """从官方API获取抽卡记录"""
+    base_urls = {
+        "genshin": "https://hk4e-api.mihoyo.com/event/gacha_info/api/getGachaLog",
+        "zzz": "https://zzz-zero-api.mihoyo.com/event/zzz_gacha/api/getGachaLog",
+        "starrail": "https://api-takumi.mihoyo.com/common/gacha_record/api/getGachaLog"
+    }
+    if game_type not in base_urls:
+        raise HTTPException(status_code=400, detail="不支持的游戏类型")
+    
+    base_url = base_urls[game_type]
+    params = {
+        "authkey": auth_key,
+        "authkey_ver": "1",
+        "sign_type": "2",
+        "lang": "zh-cn",
+        "gacha_type": gacha_type,
+        "page": "1",
+        "size": "20",
+        "end_id": end_id
+    }
+    
+    all_records = []
+    max_pages = 100 # 最多获取100页，防止死循环
+    
+    for page in range(max_pages):
+        try:
+            response = requests.get(base_url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            
+            if data["retcode"] != 0:
+                break
+            
+            list_data = data["data"]["list"]
+            if not list_data:
+                break
+            
+            all_records.extend(list_data)
+            params["end_id"] = list_data[-1]["id"]
+            
+            if len(list_data) < 20:
+                break
+                
+        except Exception as e:
+            logger.error(f"获取抽卡记录失败: {e}")
+            break
+    
+    return all_records
+# 路由
+@app.get("/", response_class=HTMLResponse)
+async def index():
+    """前端首页"""
+    with open("../frontend/index.html", "r", encoding="utf-8") as f:
+        return f.read()
+# 账号管理
+@app.get("/api/accounts")
+async def get_accounts():
+    """获取所有账号"""
+    conn = sqlite3.connect("../data/gachastats.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM accounts ORDER BY create_time DESC")
+    accounts = cursor.fetchall()
+    conn.close()
+    
+    result = []
+    for acc in accounts:
+        result.append({
+            "id": acc[0],
+            "game_type": acc[1],
+            "account_name": acc[2],
+            "server": acc[3],
+            "uid": acc[4],
+            "last_sync_time": acc[6],
+            "create_time": acc[7]
+        })
+    return result
+@app.post("/api/accounts")
+async def create_account(account: AccountCreate):
+    """创建游戏账号"""
+    try:
+        conn = sqlite3.connect("../data/gachastats.db")
+        cursor = conn.cursor()
+        cursor.execute('''
+        INSERT INTO accounts (game_type, account_name, server, uid, auth_key)
+        VALUES (?, ?, ?, ?, ?)
+        ''', (account.game_type, account.account_name, account.server, account.uid, account.auth_key))
+        conn.commit()
+        account_id = cursor.lastrowid
+        conn.close()
+        return {"status": "success", "account_id": account_id, "message": "账号创建成功"}
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=400, detail="该游戏UID已存在")
+# 抽卡记录导入
+@app.post("/api/import/official")
+async def import_from_official(account_id: int, gacha_url: str):
+    """从官方抽卡链接导入数据"""
+    conn = sqlite3.connect("../data/gachastats.db")
+    cursor = conn.cursor()
+    
+    # 获取账号信息
+    cursor.execute("SELECT game_type, auth_key FROM accounts WHERE id = ?", (account_id,))
+    account = cursor.fetchone()
+    if not account:
+        raise HTTPException(status_code=404, detail="账号不存在")
+    
+    game_type, saved_auth_key = account
+    params = parse_gacha_url(gacha_url)
+    auth_key = params.get("authkey", saved_auth_key)
+    
+    if not auth_key:
+        raise HTTPException(status_code=400, detail="无法获取authkey，请检查抽卡链接")
+    
+    # 不同卡池类型
+    gacha_types = {
+        "genshin": ["100", "200", "301", "302"], # 新手/常驻/角色/武器
+        "zzz": ["1", "2", "3", "4"], # 音擎/角色/常驻/新手
+        "starrail": ["1", "2", "11", "12"] # 新手/常驻/角色/光锥
+    }
+    
+    total_imported = 0
+    for gacha_type in gacha_types.get(game_type, []):
+        records = fetch_gacha_records(game_type, auth_key, gacha_type)
+        for record in records:
+            try:
+                cursor.execute('''
+                INSERT OR IGNORE INTO gacha_records 
+                (account_id, gacha_type, gacha_name, item_name, item_type, rarity, time)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    account_id,
+                    gacha_type,
+                    record.get("gacha_name", ""),
+                    record.get("name", ""),
+                    record.get("item_type", ""),
+                    int(record.get("rank_type", 3)),
+                    record.get("time", "")
+                ))
+                if cursor.rowcount > 0:
+                    total_imported += 1
+            except Exception as e:
+                logger.error(f"导入记录失败: {e}")
+                continue
+    
+    # 更新最后同步时间
+    cursor.execute('''
+    UPDATE accounts SET last_sync_time = ? WHERE id = ?
+    ''', (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), account_id))
+    
+    conn.commit()
+    conn.close()
+    
+    return {"status": "success", "imported": total_imported, "message": f"成功导入 {total_imported} 条抽卡记录"}
+@app.post("/api/import/manual")
+async def import_manual(data: GachaRecordImport):
+    """手动导入抽卡记录"""
+    conn = sqlite3.connect("../data/gachastats.db")
+    cursor = conn.cursor()
+    
+    imported = 0
+    for record in data.records:
+        try:
+            cursor.execute('''
+            INSERT OR IGNORE INTO gacha_records 
+            (account_id, gacha_type, gacha_name, item_name, item_type, rarity, time)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                data.account_id,
+                record.get("gacha_type", ""),
+                record.get("gacha_name", ""),
+                record.get("item_name", ""),
+                record.get("item_type", ""),
+                record.get("rarity", 3),
+                record.get("time", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            ))
+            if cursor.rowcount > 0:
+                imported += 1
+        except Exception as e:
+            continue
+    
+    conn.commit()
+    conn.close()
+    
+    return {"status": "success", "imported": imported, "message": f"成功导入 {imported} 条记录"}
+# 数据分析
+@app.get("/api/analysis/{account_id}")
+async def get_analysis(account_id: int, gacha_type: Optional[str] = None):
+    """获取抽卡分析报告"""
+    conn = sqlite3.connect("../data/gachastats.db")
+    cursor = conn.cursor()
+    
+    # 获取账号信息
+    cursor.execute("SELECT game_type, account_name, uid FROM accounts WHERE id = ?", (account_id,))
+    account = cursor.fetchone()
+    if not account:
+        raise HTTPException(status_code=404, detail="账号不存在")
+    game_type, account_name, uid = account
+    
+    # 查询抽卡记录
+    if gacha_type:
+        cursor.execute('''
+        SELECT gacha_type, gacha_name, item_name, item_type, rarity, time 
+        FROM gacha_records 
+        WHERE account_id = ? AND gacha_type = ?
+        ORDER BY time ASC
+        ''', (account_id, gacha_type))
+    else:
+        cursor.execute('''
+        SELECT gacha_type, gacha_name, item_name, item_type, rarity, time 
+        FROM gacha_records 
+        WHERE account_id = ?
+        ORDER BY time ASC
+        ''', (account_id,))
+    
+    records = cursor.fetchall()
+    conn.close()
+    
+    if not records:
+        return {"status": "success", "data": {"message": "暂无抽卡数据"}}
+    
+    # 基础统计
+    total_pulls = len(records)
+    five_star_count = sum(1 for r in records if r[4] == 5)
+    four_star_count = sum(1 for r in records if r[4] == 4)
+    
+    # 计算各个卡池的水位
+    pool_pity = {}
+    five_star_history = []
+    
+    # 按卡池分组计算
+    from collections import defaultdict
+    pool_records = defaultdict(list)
+    for r in records:
+        pool_records[r[0]].append(r)
+    
+    for pool_type, pool_data in pool_records.items():
+        current_pity = 0
+        last_five_pity = 0
+        pity_list = []
+        
+        for r in pool_data:
+            current_pity += 1
+            if r[4] == 5:
+                pity_list.append(current_pity)
+                five_star_history.append({
+                    "name": r[2],
+                    "pity": current_pity,
+                    "time": r[5],
+                    "pool": r[1]
+                })
+                current_pity = 0
+        
+        # 计算当前水位
+        if pity_list:
+            avg_pity = sum(pity_list) / len(pity_list)
+            min_pity = min(pity_list)
+            max_pity = max(pity_list)
+        else:
+            avg_pity = 0
+            min_pity = 0
+            max_pity = 0
+        
+        # 计算出货概率
+        if current_pity <= 73:
+            next_prob = 0.6
+        else:
+            next_prob = 0.6 + (current_pity - 73) * 6
+        
+        pool_pity[pool_type] = {
+            "current_pity": current_pity,
+            "five_star_count": len(pity_list),
+            "avg_pity": round(avg_pity, 1),
+            "min_pity": min_pity,
+            "max_pity": max_pity,
+            "next_five_star_prob": round(next_prob, 2)
+        }
+    
+    # 欧非评级
+    five_star_rate = (five_star_count / total_pulls) * 100 if total_pulls > 0 else 0
+    if five_star_rate >= 2.0:
+        level = "欧皇"
+        comment = "你是真正的欧皇，快让我吸吸欧气！"
+    elif five_star_rate >= 1.6:
+        level = "正常水平"
+        comment = "抽卡运气正常，继续保持~"
+    elif five_star_rate >= 1.0:
+        level = "非酋"
+        comment = "稍微有点非，下次一定欧！"
+    else:
+        level = "究极非酋"
+        comment = "这运气，建议去买彩票反向选号！"
+    
+    analysis = {
+        "account_info": {
+            "game_type": game_type,
+            "account_name": account_name,
+            "uid": uid
+        },
+        "basic_stats": {
+            "total_pulls": total_pulls,
+            "five_star_count": five_star_count,
+            "four_star_count": four_star_count,
+            "five_star_rate": round(five_star_rate, 2),
+            "four_star_rate": round((four_star_count / total_pulls) * 100, 2) if total_pulls > 0 else 0
+        },
+        "pool_pity": pool_pity,
+        "five_star_history": sorted(five_star_history, key=lambda x: x["time"], reverse=True),
+        "level": level,
+        "comment": comment
+    }
+    
+    return {"status": "success", "data": analysis}
+@app.get("/api/statistics/all")
+async def get_all_statistics():
+    """获取所有账号的统计对比"""
+    conn = sqlite3.connect("../data/gachastats.db")
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT id, game_type, account_name, uid FROM accounts")
+    accounts = cursor.fetchall()
+    
+    result = []
+    for acc in accounts:
+        account_id, game_type, account_name, uid = acc
+        cursor.execute('''
+        SELECT COUNT(*), SUM(CASE WHEN rarity = 5 THEN 1 ELSE 0 END)
+        FROM gacha_records 
+        WHERE account_id = ?
+        ''', (account_id,))
+        stats = cursor.fetchone()
+        total, five_star = stats if stats[0] else (0, 0)
+        
+        rate = (five_star / total) * 100 if total > 0 else 0
+        result.append({
+            "account_id": account_id,
+            "game_type": game_type,
+            "account_name": account_name,
+            "uid": uid,
+            "total_pulls": total,
+            "five_star_count": five_star,
+            "five_star_rate": round(rate, 2)
+        })
+    
+    conn.close()
+    return {"status": "success", "data": result}
+if __name__ == "__main__":
+    import uvicorn
+    logger.info("GachaStats 服务启动中...")
+    logger.info(f"服务地址: http://0.0.0.0:8777")
+    logger.info(f"API文档: http://0.0.0.0:8777/docs")
+    logger.info(f"前端界面: http://0.0.0.0:8777/")
+    
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8777,
+        reload=True
+    )
