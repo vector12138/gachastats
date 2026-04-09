@@ -1,0 +1,21 @@
+# 配置示例 - GachaStats 抽卡记录工具
+
+## 基本配置
+```json
+{
+    "host": "0.0.0.0",
+    "port": 8777,
+    "reload": true
+}
+```
+
+## 其他可用配置选项
+```json
+{
+    "host": "127.0.0.1",       // 仅本地访问
+    "port": 8080,             // 自定义端口
+    "reload": false,          // 关闭热重载（生产环境建议关闭）
+    "log_level": "info",      // 日志级别 (debug, info, warning, error, critical)
+    "workers": 1             // worker进程数量（生产环境使用）
+}
+```

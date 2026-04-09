@@ -32,3 +32,12 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# 虚拟环境
+venv/*
+
+# 临时文件
+tmp/*
+
+# Claude文件
+.claude/*
