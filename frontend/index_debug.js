@@ -1,4 +1,17 @@
-const { createApp } = Vue
+// 调试：捕获ElementPlus加载问题
+debugconsole.log('ElementPlus加载状态:', typeof ElementPlus !== 'undefined');
+debugconsole.log('Vue版本:', Vue.version);
+debugconsole.log('当前编译:', '---start---');
+// 添加Element Plus组件加载检测
+document.addEventListener('DOMContentLoaded', () => {
+    debugconsole.log('DOM加载完成');
+    debugconsole.log('容器存在:', document.getElementById('app'));
+    setTimeout(() => {
+        debugconsole.log('延时后ElementPlus:', typeof ElementPlus !== 'undefined');
+    }, 500);
+});
+
+const { createApp } = Vue;
 const app = createApp({
   data() {
     return {
@@ -26,12 +39,14 @@ const app = createApp({
     }
   },
   mounted() {
+    debugconsole.log('Vue应用mounted')
     this.loadAccounts()
     this.loadAllStats()
   },
   methods: {
     // 打开添加账号对话框
     openAddAccount() {
+      debugconsole.log('调用openAddAccount，显示添加账号对话框')
       this.showAddAccount = true
       this.addAccountMethod = '' // 显示选择界面
     },
@@ -69,17 +84,22 @@ const app = createApp({
     async loadAccounts() {
       try {
         const res = await axios.get('/api/accounts')
+        debugconsole.log('账号API返回:', res)
         this.accounts = res.data
+        debugconsole.log('账号数组:', this.accounts, '长度:', this.accounts?.length)
       } catch (e) {
+        debugconsole.log('加载账号失败:', e)
         ElMessage.error('加载账号失败')
       }
     },
     async loadAllStats() {
       try {
         const res = await axios.get('/api/statistics/all')
+        debugconsole.log('统计API返回:', res)
         this.allStats = res.data.data
+        debugconsole.log('统计数组:', this.allStats, '长度:', this.allStats?.length)
       } catch (e) {
-        console.log('加载统计失败')
+        debugconsole.log('加载统计失败:', e)
       }
     },
     async createAccount() {
@@ -96,6 +116,7 @@ const app = createApp({
       }
     },
     importData(accountId) {
+      debugconsole.log('选择导入账号:', accountId)
       this.currentAccountId = accountId
       this.showImport = true
       this.importUrl = ''
@@ -119,15 +140,19 @@ const app = createApp({
       }
     },
     async viewAnalysis(accountId) {
+      debugconsole.log('查看分析:', accountId)
       try {
         const res = await axios.get(`/api/analysis/${accountId}`)
         this.analysisData = res.data.data
+        debugconsole.log('分析数据:', this.analysisData)
         window.scrollTo({ top: 0, behavior: 'smooth' })
       } catch (e) {
+        debugconsole.log('获取分析失败:', e)
         ElMessage.error('获取分析失败')
       }
     },
     deleteAccount(accountId) {
+      debugconsole.log('删除账号', accountId)
       ElMessage.warning('删除功能待实现')
     },
     getPoolName(poolType, gameType) {
@@ -156,5 +181,10 @@ const app = createApp({
   }
 })
 
-app.use(ElementPlus)
-app.mount('#app')
+// 添加错误检查
+debugapp.use(ElementPlus)
+debugconsole.log('Vue应用创建完成，准备挂载')
+debugapp.mount('#app')
+debugconsole.log('Vue应用已挂载')
+
+debugconsole.log('调试信息:', typeof ElementPlus === 'undefined' ? 'ElementPlus加载失败!' : 'ElementPlus加载成功')

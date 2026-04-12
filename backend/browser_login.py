@@ -1,25 +1,57 @@
 #!/usr/bin/env python3
-"""
-浏览器自动登录模块
+"""浏览器自动登录模块 - 自动检测图形界面环境
 通过Playwright实现浏览器自动登录，捕获网络请求获取Cookie和authkey
 """
 
+import os
 import asyncio
 import json
 import re
 from typing import Dict, Optional, Tuple
-from playwright.async_api import async_playwright, Browser, Cookie
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from datetime import datetime
 import logging
+from loguru import logger
 
-from .logging_config import logger
+from .database import get_session
 from .models import Account
-from .database import engine, get_session
 
+def has_display() -> bool:
+    """检测是否有图形界面环境"""
+    # 检查DISPLAY环境变量（Linux）
+    if os.environ.get('DISPLAY'):
+        return True
+    # 检查Wayland
+    if os.environ.get('WAYLAND_DISPLAY'):
+        return True
+    # Windows/macOS默认有图形界面
+    if os.name == 'nt' or os.name == 'posix' and os.uname().sysname == 'Darwin':
+        return True
+    # 检查常见的No GUI标记
+    if os.environ.get('NO_GUI') or os.environ.get('HEADLESS'):
+        return False
+    return False
+
+def is_playwright_available() -> bool:
+    """检测Playwright是否可用"""
+    try:
+        from playwright.async_api import async_playwright
+        return True
+    except ImportError:
+        return False
+
+# 条件导入Playwright
+if is_playwright_available():
+    from playwright.async_api import async_playwright, Browser, Cookie
+else:
+    async_playwright = None
+    Browser = None
+    Cookie = None
 
 router = APIRouter()
+HAS_DISPLAY = has_display()
+IS_BROWSER_AVAILABLE = is_playwright_available()
 
 
 class LoginRequest(BaseModel):
@@ -30,12 +62,13 @@ class LoginRequest(BaseModel):
 class BrowserController:
     """浏览器控制器类"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.playwright = None
         self.browser = None
         self.page = None
 
-    async def start_browser(self, headless: bool = False):
+    async def start_browser(self, headless: bool = False) -> None:
+        """启动浏览器"""
         """启动浏览器"""
         self.playwright = await async_playwright().start()
         self.browser = await self.playwright.chromium.launch(
@@ -44,14 +77,14 @@ class BrowserController:
         )
         self.page = await self.browser.new_page()
 
-    async def stop_browser(self):
+    async def stop_browser(self) -> None:
         """关闭浏览器"""
         if self.browser:
             await self.browser.close()
         if self.playwright:
             await self.playwright.stop()
 
-    async def navigate_to_login(self, game_type: str):
+    async def navigate_to_login(self, game_type: str) -> None:
         """导航到对应的登录页面"""
         login_pages = {
             "genshin": "https://hk4e-api.mihoyo.com",
@@ -130,18 +163,49 @@ async def start_browser_login(request: LoginRequest, background_tasks: Backgroun
     """开始浏览器登录流程"""
     game_type = request.game_type
 
-    if game_type not in ["genshin", "zzz", "starrail"]:
-        raise HTTPException(status_code=400, detail="不支持的游戏类型")
+    if game_type not in ["genshin", "zzz", "starrail", "zenless"]:
+        raise HTTPException(status_code=400, detail="不支持的游戏类型：仅支持 genshin, zzz, starrail, zenless")
+
+    # 检查是否有图形界面
+    if not HAS_DISPLAY:
+        raise HTTPException(
+            status_code=503,
+            detail="当前服务器没有图形界面，无法启动浏览器。请使用【从链接提取AuthKey】功能手动获取。"
+        )
+
+    # 检查Playwright是否可用
+    if not IS_BROWSER_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="浏览器自动化组件未安装。请使用【从链接提取AuthKey】功能手动获取。"
+        )
 
     logger.info(f"开始 {game_type} 浏览器登录流程")
 
-    # 在后台任务中执行登录
-    background_tasks.add_task(process_browser_login, game_type, request.save_account)
+    # 在后台任务中执行登录 - 需要包装async函数
+    def run_browser_login():
+        import asyncio
+        asyncio.run(process_browser_login(game_type, request.save_account))
+
+    background_tasks.add_task(run_browser_login)
 
     return {
         "status": "success",
         "message": "已启动浏览器登录流程，请在浏览器中完成登录操作",
         "status_url": "/api/auth/login-status"
+    }
+
+
+@router.get("/api/auth/browser-status")
+async def get_browser_status():
+    """获取浏览器环境状态"""
+    return {
+        "status": "success",
+        "data": {
+            "has_display": HAS_DISPLAY,
+            "browser_available": IS_BROWSER_AVAILABLE,
+            "can_auto_login": HAS_DISPLAY and IS_BROWSER_AVAILABLE
+        }
     }
 
 
@@ -175,8 +239,11 @@ async def process_browser_login(game_type: str, save_account: bool):
         logger.info("浏览器登录流程完成")
 
     except Exception as e:
-        logger.error(f"浏览器登录失败: {e}")
-        raise
+        error_msg = str(e)
+        if "Executable doesn't exist" in error_msg or "playwright install" in error_msg:
+            logger.error("浏览器登录失败: Playwright 浏览器未安装")
+        else:
+            logger.error(f"浏览器登录失败: {e}")
     finally:
         # 关闭浏览器
         await browser_controller.stop_browser()
@@ -188,7 +255,8 @@ async def save_browser_login_account(game_type: str, uid: str, authkey: str, coo
         from sqlmodel import Session, select
 
         # 获取会话
-        session = next(get_session())
+        session_gen = get_session()
+        session = next(session_gen)
 
         # 检查是否已存在该UID
         existing_account = session.exec(
@@ -207,7 +275,7 @@ async def save_browser_login_account(game_type: str, uid: str, authkey: str, coo
             new_account = Account(
                 game_type=game_type,
                 account_name=f"浏览器登录-{uid}",
-                server="CN",  # 默认国服
+                server="cn_gf01",  # 默认国服
                 uid=uid,
                 auth_key=authkey,
                 create_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -216,7 +284,6 @@ async def save_browser_login_account(game_type: str, uid: str, authkey: str, coo
             logger.info(f"创建新账号 {uid}")
 
         session.commit()
-        session.close()
 
         logger.info(f"账号 {uid} 保存成功")
 
@@ -240,10 +307,15 @@ async def extract_authkey_from_user_url(request: dict):
 
     authkey = authkey_match.group(1)
 
+    # 尝试提取UID
+    uid_match = re.search(r'uid=(\d+)', url)
+    uid = uid_match.group(1) if uid_match else "未知"
+
     logger.info(f"成功从URL中提取authkey: {authkey[:20]}...")
 
     return {
         "status": "success",
         "authkey": authkey,
-        "message": f"成功提取 authkey 到账号 {uid}"
+        "uid": uid,
+        "message": f"成功提取 authkey"
     }

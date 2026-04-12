@@ -1,4 +1,5 @@
-"""Import routes for GachaStats"""
+"""Import routes for GachaStats."""
+from typing import Dict, Any, List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from datetime import datetime
@@ -10,7 +11,11 @@ from .utils import parse_gacha_url, fetch_gacha_records
 router = APIRouter()
 
 @router.post("/api/import/official")
-async def import_from_official(account_id: int, gacha_url: str, session: Session = Depends(get_session)):
+async def import_from_official(
+    account_id: int,
+    gacha_url: str,
+    session: Session = Depends(get_session)
+) -> Dict[str, Any]:
     """从官方抽卡链接导入数据"""
     account = session.get(Account, account_id)
     if not account:
@@ -50,7 +55,7 @@ async def import_from_official(account_id: int, gacha_url: str, session: Session
     return {"status": "success", "imported": total_imported, "message": f"成功导入 {total_imported} 条抽卡记录"}
 
 @router.post("/api/import/manual")
-async def import_manual(data: dict, session: Session = Depends(get_session)):
+async def import_manual(data: Dict[str, Any], session: Session = Depends(get_session)) -> Dict[str, Any]:
     """手动导入抽卡记录"""
     # Expected data schema: {"account_id": int, "records": List[dict]}
     account_id = data.get("account_id")

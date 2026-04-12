@@ -1,3 +1,4 @@
+"""Database models for GachaStats."""
 from sqlalchemy import UniqueConstraint
 from typing import Optional, List
 from sqlmodel import SQLModel, Field, Relationship

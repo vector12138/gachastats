@@ -72,8 +72,11 @@ setup_logging_intercept()
 from .database import init_db
 from .accounts import router as accounts_router
 from .imports import router as imports_router
-from .analysis import router as analysis_router
+from .analysis_routes import router as analysis_router
 from .browser_login import router as browser_login_router
+from .export_routes import router as export_router
+from .planning_routes import router as planning_router
+from .charts_routes import router as charts_router
 
 # 初始化数据库表
 init_db()
@@ -93,16 +96,20 @@ app.include_router(accounts_router)
 app.include_router(imports_router)
 app.include_router(analysis_router)
 app.include_router(browser_login_router)
+app.include_router(export_router)
+app.include_router(planning_router)
+app.include_router(charts_router)
 
 @app.get("/", response_class=HTMLResponse)
-async def index():
+async def index() -> str:
     """前端首页"""
     with open("frontend/index.html", "r", encoding="utf-8") as f:
-        return f.read()
+        html = f.read()
+    return html
 
 # ------------------- 统一 API 响应格式 -------------------
 @app.middleware("http")
-async def unify_response(request: Request, call_next):
+async def unify_response(request: Request, call_next) -> JSONResponse:
     """包装成功响应并统一错误结构"""
     response = await call_next(request)
     if 200 <= response.status_code < 300 and isinstance(response, JSONResponse):
@@ -121,7 +128,7 @@ async def unify_response(request: Request, call_next):
 from fastapi.exceptions import HTTPException as FastAPIHTTPException
 
 @app.exception_handler(FastAPIHTTPException)
-async def http_exception_handler(request: Request, exc: FastAPIHTTPException):
+async def http_exception_handler(request: Request, exc: FastAPIHTTPException) -> JSONResponse:
     """统一 HTTP 错误响应结构"""
     logger.error(f"HTTP error {exc.status_code}: {exc.detail}")
     return JSONResponse(

@@ -1,11 +1,12 @@
-"""Utility functions for GachaStats"""
+"""Utility functions for GachaStats."""
+from typing import Dict, List, Any
 import requests
 from datetime import datetime
 from fastapi import HTTPException
 from .logging_config import logger
 
 
-def parse_gacha_url(url: str) -> dict:
+def parse_gacha_url(url: str) -> Dict[str, str]:
     """Parse gacha URL and extract query parameters."""
     params = {}
     if "?" in url:
@@ -17,16 +18,16 @@ def parse_gacha_url(url: str) -> dict:
     return params
 
 
-def fetch_gacha_records(game_type: str, auth_key: str, gacha_type: str, end_id: str = "0") -> list[dict]:
+def fetch_gacha_records(game_type: str, auth_key: str, gacha_type: str, end_id: str = "0") -> List[Dict[str, Any]]:
     """Fetch gacha records from official API."""
     base_urls = {
         "genshin": "https://hk4e-api.mihoyo.com/event/gacha_info/api/getGachaLog",
-        "zzz": "https://zzz-zero-api.mihoyo.com/event/zzz_gacha/api/getGachaLog",
-        "starrail": "https://api-takumi.mihoyo.com/common/gacha_record/api/getGachaLog",
+        "honkai3": "https://api-tachibana.mihoyo.com/event/gacha_info/api/getGachaLog",
+        "starrail": "https://api-takumi.mihoyo.com/event/gacha_info/api/getGachaLog",
+        "zzz": "https://api-takumi.mihoyo.com/event/gacha_info/api/getGachaLog",
     }
-    if game_type not in base_urls:
-        raise HTTPException(status_code=400, detail="不支持的游戏类型")
-    base_url = base_urls[game_type]
+    base_url = base_urls.get(game_type, base_urls["genshin"])
+
     params = {
         "authkey": auth_key,
         "authkey_ver": "1",
@@ -57,3 +58,77 @@ def fetch_gacha_records(game_type: str, auth_key: str, gacha_type: str, end_id: 
             logger.error(f"获取抽卡记录失败: {e}")
             break
     return all_records
+
+
+def calculate_pity(records: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Calculate pity statistics from gacha records.
+
+    Args:
+        records: List of dictionaries containing rarity and time information
+
+    Returns:
+        Dictionary containing pity analysis:
+        - total_pulls: Total number of pulls
+        - current_pity: Current pity count since last 5-star
+        - last_five_star_index: Index of last 5-star pull
+        - pity_distribution: Count by rarity
+        - pity_statistics: Min, max, average pity between 5-stars
+    """
+    if not records:
+        return {
+            "total_pulls": 0,
+            "current_pity": 0,
+            "pity_distribution": {"five_star": 0, "four_star": 0, "three_star": 0},
+            "pity_statistics": {"min": 0, "max": 0, "avg": 0}
+        }
+
+    total_pulls = len(records)
+
+    # Count by rarity
+    pity_distribution = {
+        "five_star": 0,
+        "four_star": 0,
+        "three_star": 0
+    }
+
+    # Calculate pity intervals
+    pity_list = []
+    current_pity = 0
+    last_five_star_index = -1
+
+    for i, record in enumerate(records):
+        current_pity += 1
+        rarity = record.get("rarity", 0)
+
+        if rarity >= 5:
+            pity_distribution["five_star"] += 1
+            pity_list.append(current_pity)
+            current_pity = 0
+            last_five_star_index = i
+        elif rarity == 4:
+            pity_distribution["four_star"] += 1
+        elif rarity == 3:
+            pity_distribution["three_star"] += 1
+
+    # Calculate statistics
+    if pity_list:
+        min_pity = min(pity_list)
+        max_pity = max(pity_list)
+        avg_pity = sum(pity_list) / len(pity_list)
+        pity_stats = {
+            "min": min_pity,
+            "max": max_pity,
+            "avg": round(avg_pity, 2)
+        }
+    else:
+        # No 5-stars found
+        current_pity = total_pulls  # Count from the beginning
+        pity_stats = {"min": 0, "max": 0, "avg": 0}
+
+    return {
+        "total_pulls": total_pulls,
+        "current_pity": current_pity,
+        "last_five_star_index": last_five_star_index,
+        "pity_distribution": pity_distribution,
+        "pity_statistics": pity_stats
+    }

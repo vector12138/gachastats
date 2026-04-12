@@ -1,427 +1,411 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GachaStats - 米哈游抽卡分析工具</title>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
-    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
-    <script src="https://unpkg.com/element-plus/dist/index.full.js"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        .header {
-            text-align: center;
-            color: white;
-            margin-bottom: 30px;
-        }
-        .header h1 {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-        .card {
-            background: white;
-            border-radius: 12px;
-            padding: 24px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-        }
-        .stat-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            text-align: center;
-            padding: 20px;
-            border-radius: 8px;
-        }
-        .stat-card h3 {
-            font-size: 2rem;
-            margin: 10px 0;
-        }
-        .five-star {
-            color: #ffd700;
-            font-weight: bold;
-        }
-        .four-star {
-            color: #9370db;
-            font-weight: bold;
-        }
-        .pool-item {
-            border: 1px solid #eee;
-            border-radius: 8px;
-            padding: 16px;
-            margin-bottom: 12px;
-        }
-        .history-item {
-            padding: 12px;
-            border-bottom: 1px solid #eee;
-        }
-        .history-item:last-child {
-            border-bottom: none;
-        }
-        .level-tag {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            color: white;
-            font-weight: bold;
-        }
-        .level-欧皇 {
-            background: linear-gradient(135deg, #ffd700, #ffed4e);
-            color: #333;
-        }
-        .level-正常水平 {
-            background: linear-gradient(135deg, #4facfe, #00f2fe);
-        }
-        .level-非酋 {
-            background: linear-gradient(135deg, #fa709a, #fee140);
-        }
-        .level-究极非酋 {
-            background: linear-gradient(135deg, #f093fb, #f5576c);
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GachaStats - 米哈游抽卡分析工具</title>
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='50' text-anchor='middle' dy='.3em' font-size='70'%3E%F0%9F%8E%AE%3C/text%3E%3C/svg%3E">
+
+<link rel="stylesheet" href="/static/css/base.css">
+<link rel="stylesheet" href="/static/css/layout.css">
+<link rel="stylesheet" href="/static/css/components.css">
+<link rel="stylesheet" href="/static/css/charts.css">
+<link rel="stylesheet" href="/static/css/element-plus.css">
+
+<style>
+body {
+  background: #f5f5f5;
+  font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+</style>
 </head>
 <body>
-    <div id="app" class="container">
-        <div class="header">
-            <h1>🎮 GachaStats</h1>
-            <p>米哈游全游戏抽卡数据分析工具</p>
-        </div>
-        <!-- 账号管理 -->
-        <div class="card">
-            <h3>📱 账号管理</h3>
-            <!-- 修改按钮点击事件 -->
- <el-button type="primary" @click="openAddAccount" style="margin-bottom: 16px;">添加账号</el-button>
-            
-            <el-table :data="accounts" style="width: 100%" v-if="accounts.length">
-                <el-table-column prop="account_name" label="账号名称" />
-                <el-table-column prop="game_type" label="游戏">
-                    <template #default="scope">
-                        <span v-if="scope.row.game_type == 'genshin'">原神</span>
-                        <span v-else-if="scope.row.game_type == 'zzz'">绝区零</span>
-                        <span v-else-if="scope.row.game_type == 'starrail'">星穹铁道</span>
-                        <span v-else>崩坏3</span>
-                    </template>
-                </el-table-column>
-                <el-table-column prop="uid" label="UID" />
-                <el-table-column prop="last_sync_time" label="最后同步" />
-                <el-table-column label="操作" width="280">
-                    <template #default="scope">
-                        <el-button size="small" @click="importData(scope.row.id)">导入数据</el-button>
-                        <el-button size="small" type="primary" @click="viewAnalysis(scope.row.id)">查看分析</el-button>
-                        <el-button size="small" type="danger" @click="deleteAccount(scope.row.id)">删除</el-button>
-                    </template>
-                </el-table-column>
-            </el-table>
-            <div v-else style="text-align: center; color: #999; padding: 40px;">
-                暂无账号，请先添加游戏账号
-            </div>
-        </div>
-        <!-- 统计概览 -->
-        <div class="card" v-if="allStats.length">
-            <h3>📊 全账号统计对比</h3>
-            <el-row :gutter="20">
-                <el-col :xs="12" :sm="6" v-for="stat in allStats" :key="stat.account_id">
-                    <div class="card">
-                        <h4>{{ stat.account_name }} ({{ stat.uid }})</h4>
-                        <p>总抽数: {{ stat.total_pulls }}</p>
-                        <p class="five-star">五星数量: {{ stat.five_star_count }}</p>
-                        <p>五星率: <strong>{{ stat.five_star_rate }}%</strong></p>
-                    </div>
-                </el-col>
-            </el-row>
-        </div>
-        <!-- 分析报告 -->
-        <div class="card" v-if="analysisData">
-            <h3>📈 抽卡分析报告</h3>
-            <div style="margin-bottom: 20px;">
-                <h4>{{ analysisData.account_info.account_name }} ({{ analysisData.account_info.uid }})</h4>
-                <span class="level-tag" :class="'level-' + analysisData.level">{{ analysisData.level }}</span>
-                <p style="margin-top: 8px; color: #666;">{{ analysisData.comment }}</p>
-            </div>
-            <el-row :gutter="20">
-                <el-col :xs="12" :sm="6">
-                    <div class="stat-card">
-                        <p>总抽数</p>
-                        <h3>{{ analysisData.basic_stats.total_pulls }}</h3>
-                    </div>
-                </el-col>
-                <el-col :xs="12" :sm="6">
-                    <div class="stat-card">
-                        <p>五星数量</p>
-                        <h3 class="five-star">{{ analysisData.basic_stats.five_star_count }}</h3>
-                    </div>
-                </el-col>
-                <el-col :xs="12" :sm="6">
-                    <div class="stat-card">
-                        <p>五星率</p>
-                        <h3>{{ analysisData.basic_stats.five_star_rate }}%</h3>
-                    </div>
-                </el-col>
-                <el-col :xs="12" :sm="6">
-                    <div class="stat-card">
-                        <p>四星数量</p>
-                        <h3 class="four-star">{{ analysisData.basic_stats.four_star_count }}</h3>
-                    </div>
-                </el-col>
-            </el-row>
-            <h4 style="margin: 24px 0 12px;">卡池水位</h4>
-            <div class="pool-item" v-for="(pity, pool) in analysisData.pool_pity" :key="pool">
-                <h5>{{ getPoolName(pool, analysisData.account_info.game_type) }}</h5>
-                <p>当前水位: <strong>{{ pity.current_pity }} 抽</strong></p>
-                <p>下次五星概率: {{ pity.next_five_star_prob }}%</p>
-                <p>平均出货水位: {{ pity.avg_pity }} 抽</p>
-                <p>历史出货: 最低 {{ pity.min_pity }} 抽，最高 {{ pity.max_pity }} 抽</p>
-            </div>
-            <h4 style="margin: 24px 0 12px;">历史五星记录 (最近10条)</h4>
-            <div class="history-item" v-for="item in analysisData.five_star_history.slice(0, 10)" :key="item.time">
-                <div style="display: flex; justify-content: space-between;">
-                    <span class="five-star">⭐⭐⭐⭐⭐ {{ item.name }}</span>
-                    <span>{{ item.time }}</span>
-                </div>
-                <p style="margin-top: 4px; color: #666;">{{ item.pool }} · {{ item.pity }} 抽出货</p>
-            </div>
-        </div>
-        <!-- 添加账号弹窗 -->
-        <el-dialog v-model="showAddAccount" title="添加游戏账号" width="600px">
- <!-- 选择添加方式 -->
- <div v-if="!addAccountMethod" style="text-align: center; padding: 40px;">
- <div style="margin-bottom: 30px;">
- <h3 style="margin-bottom: 10px;">选择添加账号的方式</h3>
- <p style="color: #666;">您可以通过浏览器自动登录，或手动输入信息创建账号</p>
- </div>
- <el-row :gutter="20">
- <el-col :span="12">
- <el-card @click="addAccountMethod = 'browser'" style="cursor: pointer; text-align: center; padding: 20px;" hover>
- <div style="font-size: 48px; margin-bottom: 10px;">🔄</div>
- <h4>浏览器登录</h4>
- <p style="color: #666; font-size: 14px;">自动获取账号认证</p>
- </el-card>
- </el-col>
- <el-col :span="12">
- <el-card @click="addAccountMethod = 'manual'" style="cursor: pointer; text-align: center; padding: 20px;" hover>
- <div style="font-size: 48px; margin-bottom: 10px;">✏️</div>
- <h4>手动添加</h4>
- <p style="color: #666; font-size: 14px;">输入账号信息</p>
- </el-card>
- </el-col>
- </el-row>
- <!-- 添加取消按钮 -->
- <div style="text-align: center; margin-top: 20px;">
- <el-button @click="showAddAccount = false">取消</el-button>
- </div>
- </div>
+<div id="app">
+  <div v-if="loading" class="loading-mask page-loading">
+    <div class="loading-mask spinner"></div>
+    <p>正在加载GachaStats...</p>
+  </div>
 
- <!-- 浏览器登录方式 -->
- <div v-else-if="addAccountMethod === 'browser'" style="text-align: center; padding: 20px;">
- <p style="margin-bottom: 20px;">选择游戏并点击开始登录，系统将自动打开浏览器引导您登录</p>
- <el-form :model="browserLoginForm" label-width="80px">
- <el-form-item label="游戏">
- <el-select v-model="browserLoginForm.game_type" placeholder="选择游戏">
- <el-option label="原神" value="genshin" />
- <el-option label="绝区零" value="zzz" />
- <el-option label="星穹铁道" value="starrail" />
- <el-option label="崩坏3" value="honkai3" />
- </el-select>
- </el-form-item>
- </el-form>
- <el-button type="primary" @click="startBrowserLogin" :loading="browserLoginLoading" size="large" style="margin-top: 20px;">
- 开始浏览器登录
- </el-button>
- <!-- 返回按钮 -->
- <div style="text-align: center; margin-top: 20px;">
- <el-button @click="cancelBrowserLogin" link>返回选择方式</el-button>
- </div>
- </div>
-
- <!-- 手动添加方式 -->
- <el-form v-else-if="addAccountMethod === 'manual'" :model="accountForm" label-width="80px">
-            <el-form :model="accountForm" label-width="80px">
-                <el-form-item label="游戏">
-                    <el-select v-model="accountForm.game_type" placeholder="选择游戏">
-                        <el-option label="原神" value="genshin" />
-                        <el-option label="绝区零" value="zzz" />
-                        <el-option label="星穹铁道" value="starrail" />
-                        <el-option label="崩坏3" value="honkai3" />
-                    </el-select>
-                </el-form-item>
-                <el-form-item label="账号名称">
-                    <el-input v-model="accountForm.account_name" placeholder="比如：大号/小号" />
-                </el-form-item>
-                <el-form-item label="服务器">
-                    <el-input v-model="accountForm.server" placeholder="比如：官服/B服" />
-                </el-form-item>
-                <el-form-item label="UID">
-                    <el-input v-model="accountForm.uid" placeholder="游戏内UID" />
-                </el-form-item>
-                <el-form-item label="抽卡链接(可选)">
-                    <el-input type="textarea" v-model="accountForm.auth_key" placeholder="可以后面导入时再填" />
-                </el-form-item>
-            </el-form>
-            <template #footer>
-                <el-button @click="showAddAccount = false">取消</el-button>
-                <el-button type="primary" @click="createAccount">确认添加</el-button>
-            </template>
-        </el-dialog>
-        <!-- 导入数据弹窗 -->
-        <el-dialog v-model="showImport" title="导入抽卡记录">
-            <el-tabs v-model="importTab">
-                <el-tab-pane label="官方链接导入" name="official">
-                    <p style="margin-bottom: 12px;">在游戏内打开抽卡记录页面，复制链接粘贴到下方</p>
-                    <el-input type="textarea" v-model="importUrl" placeholder="粘贴抽卡记录链接" :rows="4" />
-                    <el-button type="primary" @click="importOfficial" style="margin-top: 12px;" :loading="importing">开始导入</el-button>
-                </el-tab-pane>
-                <el-tab-pane label="手动录入" name="manual">
-                    <p>手动添加抽卡记录，适合少量补充</p>
-                    <!-- 手动录入表单 -->
-                </el-tab-pane>
-            </el-tabs>
-        </el-dialog>
+  <div v-else class="container fade-in">
+    <div class="header page-header">
+      <h1 class="text-gradient"> GachaStats</h1>
+      <p>米哈游全游戏抽卡数据分析工具</p>
+      <div class="status-badge connection-status" :class="connectionStatus">
+        <span v-if="connectionStatus === 'success'">后端连接正常</span>
+        <span v-else-if="connectionStatus === 'error'">后端连接失败</span>
+        <span v-else>连接测试中...</span>
+      </div>
+      <button class="btn browser-login-btn" @click="currentTab = 'browser'" title="跳转到浏览器登录获取Cookie"> 获取登录Cookie</button>
     </div>
-    <script>
-        const { createApp } = Vue
-        const app = createApp({
-            data() {
-                return {
-                    accounts: [],
-                    browserLoginForm: {
-        game_type: ''
-      },
-      browserLoginLoading: false,
-      analysisData: null,
-      showAddAccount: false,
-      addAccountMethod: 'manual', // 添加账号的方式：manual 或 browser
-      addAccountMethod: '', // 添加账号的方式：manual 或 browser
-      addAccountMethod: '',
-                    analysisData: null,
-                    addAccountMethod: '', // 添加账号的方式：manual 或 browser
-                    showImport: false,
-                    importing: false,
-                    importTab: 'official',
-                    importUrl: '',
-                    currentAccountId: null,
-                    accountForm: {
-                        game_type: '',
-                        account_name: '',
-                        server: '',
-                        uid: '',
-                        auth_key: ''
-                    }
-                }
-            },
-            mounted() {
-                this.loadAccounts()
-                this.loadAllStats()
-            },
-            methods: {
-                async loadAccounts() {
-                    try {
-                        const res = await axios.get('/api/accounts')
-                        this.accounts = res.data
-                    } catch (e) {
-                        ElMessage.error('加载账号失败')
-                    }
-                },
-                async loadAllStats() {
-                    try {
-                        const res = await axios.get('/api/statistics/all')
-                        this.allStats = res.data.data
-                    } catch (e) {
-                        console.log('加载统计失败')
-                    }
-                },
-                async createAccount() {
-   this.showAddAccount = false
-   this.addAccountMethod = ''
-   this.accountForm = { game_type: '', account_name: '', server: '', uid: '', auth_key: '' }
- },
- createAccount() {
-                    try {
-                        await axios.post('/api/accounts', this.accountForm)
-                        ElMessage.success('账号添加成功')
-                        this.showAddAccount = false
-                        this.accountForm = { game_type: '', account_name: '', server: '', uid: '', auth_key: '' }
-                        await this.loadAccounts()
-                        await this.loadAllStats()
-                    } catch (e) {
-                        ElMessage.error(e.response?.data?.detail || '添加失败')
-                    }
-                },
-                importData(accountId) {
-                    this.currentAccountId = accountId
-                    this.showImport = true
-                    this.importUrl = ''
-                },
-                async importOfficial() {
-                    if (!this.importUrl) {
-                        ElMessage.warning('请输入抽卡链接')
-                        return
-                    }
-                    this.importing = true
-                    try {
-                        const res = await axios.post(`/api/import/official?account_id=${this.currentAccountId}&gacha_url=${encodeURIComponent(this.importUrl)}`)
-                        ElMessage.success(`导入成功，共导入 ${res.data.imported} 条记录`)
-                        this.showImport = false
-                        await this.loadAllStats()
-                        this.viewAnalysis(this.currentAccountId)
-                    } catch (e) {
-                        ElMessage.error(e.response?.data?.detail || '导入失败')
-                    } finally {
-                        this.importing = false
-                    }
-                },
-                async viewAnalysis(accountId) {
-                    try {
-                        const res = await axios.get(`/api/analysis/${accountId}`)
-                        this.analysisData = res.data.data
-                        window.scrollTo({ top: 0, behavior: 'smooth' })
-                    } catch (e) {
-                        ElMessage.error('获取分析失败')
-                    }
-                },
-                async deleteAccount(accountId) {
-                    ElMessage.warning('删除功能待实现')
-                },
-                getPoolName(poolType, gameType) {
-                    const names = {
-                        'genshin': {
-                            '100': '新手祈愿',
-                            '200': '常驻祈愿',
-                            '301': '角色活动祈愿',
-                            '302': '武器活动祈愿'
-                        },
-                        'zzz': {
-                            '1': '音擎祈愿',
-                            '2': '角色祈愿',
-                            '3': '常驻祈愿',
-                            '4': '新手祈愿'
-                        },
-                        'starrail': {
-                            '1': '新手跃迁',
-                            '2': '常驻跃迁',
-                            '11': '角色活动跃迁',
-                            '12': '光锥活动跃迁'
-                        }
-                    }
-                    return names[gameType]?.[poolType] || `卡池${poolType}`
-                }
-            }
-        })
-        app.use(ElementPlus)
-        app.mount('#app')
-    </script>
+
+    <div class="nav-tabs page-nav-tabs">
+      <button
+        v-for="tab in availableTabs"
+        :key="tab.key"
+        class="nav-tab page-nav-tab"
+        :class="{ active: currentTab === tab.key }"
+        @click="currentTab = tab.key"
+      >{{ tab.label }}</button>
+    </div>
+
+    <div class="content page-content">
+      <div v-if="currentTab === 'accounts'">
+        <div class="widget-card">
+          <div class="form-section">
+            <h3> 添加新账号</h3>
+            <el-form :model="accountForm" label-width="80px">
+              <el-row :gutter="20">
+                <el-col :span="12">
+                  <el-form-item label="游戏类型">
+                    <el-select v-model="accountForm.game_type">
+                      <el-option label="原神" value="genshin"></el-option>
+                      <el-option label="崩坏3" value="honkai"></el-option>
+                      <el-option label="星穹铁道" value="starrail"></el-option>
+                      <el-option label="绝区零" value="zenless"></el-option>
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="服务器">
+                    <el-select v-model="accountForm.server">
+                      <el-option label="国服官方服" value="cn_gf01"></el-option>
+                      <el-option label="国服iOS" value="cn_gf02"></el-option>
+                      <el-option label="国服渠道服" value="cn_qd01"></el-option>
+                      <el-option label="国际服" value="os_usa"></el-option>
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-row :gutter="20">
+                <el-col :span="12">
+                  <el-form-item label="账号名称">
+                    <el-input v-model="accountForm.account_name" placeholder="输入账号名称"></el-input>
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="游戏UID">
+                    <el-input v-model="accountForm.uid" placeholder="输入游戏UID"></el-input>
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-form-item>
+                <el-button type="primary" @click="addAccount">添加账号</el-button>
+                <el-button @click="resetAccountForm">重置</el-button>
+              </el-form-item>
+            </el-form>
+          </div>
+        </div>
+
+        <div class="widget-card">
+          <div class="list-section">
+            <h3> 账号列表</h3>
+            <el-table :data="accounts" style="width: 100%">
+              <el-table-column prop="id" label="ID" width="60"></el-table-column>
+              <el-table-column prop="game_type" label="游戏">
+                <template #default="{ row }">
+                  <el-tag :type="row.game_type === 'genshin' ? '' : row.game_type === 'honkai' ? 'warning' : row.game_type === 'starrail' ? 'success' : 'info'">
+                    {{ getGameName(row.game_type) }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="account_name" label="账号名"></el-table-column>
+              <el-table-column prop="uid" label="UID"></el-table-column>
+              <el-table-column prop="server" label="服务器">
+                <template #default="{ row }">
+                  <el-tag size="small">{{ getServerLabel(row.server) }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="180" align="right">
+                <template #default="{ row }">
+                  <el-button size="small" @click="editAccount(row)">编辑</el-button>
+                  <el-button size="small" type="danger" plain @click="deleteAccount(row.id)">删除</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+            <div v-if="accounts.length === 0" class="empty-state">
+              <p>暂无账号数据，请先添加账号</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-else-if="currentTab === 'import'">
+        <div class="widget-card">
+          <h3> 导入抽卡记录</h3>
+          <el-tabs v-model="importTab" type="border-card">
+            <el-tab-pane label=" 官方链接导入" name="official">
+              <div class="form-section">
+                <p style="margin-bottom: 15px; color: #666;">复制游戏内抽卡记录页面的链接，系统将自动获取所有历史抽卡数据。</p>
+                <el-form :model="importForm" label-width="100px">
+                  <el-form-item label="选择账号">
+                    <el-select v-model="importForm.account_id" placeholder="选择要导入数据的账号" style="width: 100%;">
+                      <el-option v-for="acc in accounts" :key="acc.id" :label="acc.account_name + ' (' + getGameName(acc.game_type) + ')'" :value="acc.id"></el-option>
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="抽卡链接">
+                    <el-input v-model="importForm.gacha_url" type="textarea" :rows="3" placeholder="粘贴从游戏复制的抽卡记录链接..."></el-input>
+                  </el-form-item>
+                  <el-form-item>
+                    <el-button type="primary" @click="importFromOfficial" :loading="importing">开始导入</el-button>
+                    <el-button @click="resetImportForm">重置</el-button>
+                  </el-form-item>
+                </el-form>
+              </div>
+            </el-tab-pane>
+            <el-tab-pane label=" 手动录入" name="manual">
+              <div class="form-section">
+                <p style="margin-bottom: 15px; color: #666;">手动添加单条抽卡记录，适合补充遗漏的数据。</p>
+                <el-form :model="manualForm" label-width="100px">
+                  <el-form-item label="选择账号">
+                    <el-select v-model="manualForm.account_id" placeholder="选择账号" style="width: 100%;">
+                      <el-option v-for="acc in accounts" :key="acc.id" :label="acc.account_name" :value="acc.id"></el-option>
+                    </el-select>
+                  </el-form-item>
+                  <el-row :gutter="20">
+                    <el-col :span="12">
+                      <el-form-item label="物品名称">
+                        <el-input v-model="manualForm.item_name" placeholder="如：胡桃"></el-input>
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="12">
+                      <el-form-item label="物品类型">
+                        <el-select v-model="manualForm.item_type" style="width: 100%;">
+                          <el-option label="角色" value="角色"></el-option>
+                          <el-option label="武器" value="武器"></el-option>
+                        </el-select>
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+                  <el-row :gutter="20">
+                    <el-col :span="12">
+                      <el-form-item label="稀有度">
+                        <el-select v-model="manualForm.rarity" style="width: 100%;">
+                          <el-option label="5星" :value="5"></el-option>
+                          <el-option label="4星" :value="4"></el-option>
+                          <el-option label="3星" :value="3"></el-option>
+                        </el-select>
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="12">
+                      <el-form-item label="卡池类型">
+                        <el-select v-model="manualForm.gacha_type" style="width: 100%;">
+                          <el-option label="角色活动" value="301"></el-option>
+                          <el-option label="武器活动" value="302"></el-option>
+                          <el-option label="常驻" value="200"></el-option>
+                          <el-option label="新手" value="100"></el-option>
+                        </el-select>
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+                  <el-form-item label="抽取时间">
+                    <el-date-picker v-model="manualForm.time" type="datetime" placeholder="选择时间" style="width: 100%;"></el-date-picker>
+                  </el-form-item>
+                  <el-form-item>
+                    <el-button type="primary" @click="addManualRecord">添加记录</el-button>
+                    <el-button @click="resetManualForm">重置</el-button>
+                  </el-form-item>
+                </el-form>
+              </div>
+            </el-tab-pane>
+          </el-tabs>
+        </div>
+      </div>
+
+      <div v-else-if="currentTab === 'analysis'">
+        <div class="widget-card">
+          <h3> 选择账号查看分析</h3>
+          <el-select v-model="selectedAnalysisAccount" placeholder="选择要分析的账号" style="width: 300px;" @change="loadAnalysisData">
+            <el-option v-for="acc in accounts" :key="acc.id" :label="acc.account_name + ' (' + getGameName(acc.game_type) + ')'" :value="acc.id"></el-option>
+          </el-select>
+          <el-button type="primary" @click="loadAnalysisData" :loading="analysisLoading" style="margin-left: 10px;">刷新数据</el-button>
+        </div>
+
+        <div v-if="analysisData && analysisData.message" class="widget-card empty-state">
+          <p>{{ analysisData.message }}</p>
+        </div>
+
+        <div v-else-if="analysisData" class="analysis-content">
+          <div class="widget-card">
+            <h3> 基础统计</h3>
+            <el-row :gutter="20" class="stats-row">
+              <el-col :span="6">
+                <el-statistic title="总抽数" :value="analysisData.basic_stats?.total_pulls || 0"></el-statistic>
+              </el-col>
+              <el-col :span="6">
+                <el-statistic title="五星数量" :value="analysisData.basic_stats?.five_star_count || 0"></el-statistic>
+              </el-col>
+              <el-col :span="6">
+                <el-statistic title="四星数量" :value="analysisData.basic_stats?.four_star_count || 0"></el-statistic>
+              </el-col>
+              <el-col :span="6">
+                <el-statistic title="五星率" :value="analysisData.basic_stats?.five_star_rate || 0" suffix="%"></el-statistic>
+              </el-col>
+            </el-row>
+          </div>
+
+          <div class="widget-card">
+            <h3> 欧非评级</h3>
+            <div class="luck-rating" :class="analysisData.level">
+              <div class="luck-level">{{ analysisData.level || '正常水平' }}</div>
+              <div class="luck-comment">{{ analysisData.comment || '继续保持~' }}</div>
+            </div>
+          </div>
+
+          <div class="widget-card">
+            <h3> 各卡池当前水位</h3>
+            <el-row :gutter="20">
+              <el-col :span="8" v-for="(pool, poolType) in analysisData.pool_pity" :key="poolType">
+                <el-card class="pool-card">
+                  <template #header>
+                    <span class="pool-title">{{ poolType === '301' ? '角色活动' : poolType === '302' ? '武器活动' : poolType === '200' ? '常驻' : poolType }}</span>
+                  </template>
+                  <div class="pool-stats">
+                    <div class="current-pity">
+                      <span class="pity-label">当前水位</span>
+                      <span class="pity-value" :class="{ 'high': pool.current_pity >= 70 }">{{ pool.current_pity }}</span>
+                    </div>
+                    <div class="avg-pity">平均水位: {{ pool.avg_pity }}</div>
+                    <div class="five-star-count">五星数量: {{ pool.five_star_count }}</div>
+                  </div>
+                </el-card>
+              </el-col>
+            </el-row>
+          </div>
+
+          <div class="widget-card">
+            <h3> 五星出货历史</h3>
+            <el-table :data="analysisData.five_star_history" style="width: 100%" v-if="analysisData.five_star_history?.length">
+              <el-table-column prop="name" label="物品名称" width="150"></el-table-column>
+              <el-table-column prop="pity" label="水位" width="100">
+                <template #default="{ row }">
+                  <el-tag :type="row.pity <= 40 ? 'success' : row.pity <= 70 ? 'warning' : 'danger'">{{ row.pity }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="pool" label="卡池"></el-table-column>
+              <el-table-column prop="time" label="时间"></el-table-column>
+            </el-table>
+            <div v-else class="empty-state">暂无五星记录</div>
+          </div>
+        </div>
+
+        <div v-else class="widget-card empty-state">
+          <p>请选择一个账号查看分析数据</p>
+        </div>
+      </div>
+
+      <div v-else-if="currentTab === 'browser'">
+        <!-- 自动浏览器登录 - 仅在支持的环境中显示 -->
+        <div v-if="browserStatus.can_auto_login" class="widget-card">
+          <h3>🌐 自动浏览器登录</h3>
+          <p style="margin-bottom: 15px; color: #666;">选择游戏后自动打开浏览器，登录后系统会自动获取Cookie。</p>
+          <el-alert type="success" :closable="false" style="margin-bottom: 15px;">
+            <template #title>
+              ✅ 当前支持自动浏览器登录
+            </template>
+          </el-alert>
+          <el-form :model="browserLoginForm" label-width="100px">
+            <el-form-item label="选择游戏">
+              <el-select v-model="browserLoginForm.game_type" placeholder="选择游戏" style="width: 200px;">
+                <el-option label="原神" value="genshin"></el-option>
+                <el-option label="崩坏3" value="honkai"></el-option>
+                <el-option label="星穹铁道" value="starrail"></el-option>
+                <el-option label="绝区零" value="zenless"></el-option>
+              </el-select>
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="startBrowserLogin" :loading="browserLoginLoading">启动浏览器登录</el-button>
+            </el-form-item>
+          </el-form>
+        </div>
+
+        <!-- 手动提取方式 -->
+        <div class="widget-card">
+          <h3>{{ browserStatus.can_auto_login ? '🔧 备用方式：手动获取链接' : '📱 手动获取抽卡链接' }}</h3>
+          <p v-if="!browserStatus.can_auto_login" style="margin-bottom: 15px;">
+            <el-alert type="warning" :closable="false" style="margin-bottom: 15px;">
+              <template #title>
+                ⚠️ 当前环境{{ browserStatus.has_display ? '缺少浏览器组件' : '没有图形界面' }}，请使用手动方式获取
+              </template>
+            </el-alert>
+          </p>
+          <p style="margin-bottom: 15px; color: #666;">请按以下步骤手动获取抽卡链接：</p>
+
+          <el-steps direction="vertical" :active="1" style="margin-bottom: 20px;">
+            <el-step title="打开游戏" description="启动游戏，进入游戏主界面"></el-step>
+            <el-step title="打开祈愿/跃迁" description="点击游戏内的抽卡入口"></el-step>
+            <el-step title="查看历史记录" description="点击历史记录或详情按钮"></el-step>
+            <el-step title="打开F12" description="按F12打开开发者工具，切换到Network标签"></el-step>
+            <el-step title="找到请求" description="按F5刷新，在Network中找到包含 getGachaLog 的请求"></el-step>
+            <el-step title="复制链接" description="右键点击请求，选择 Copy url"></el-step>
+          </el-steps>
+        </div>
+
+        <div class="widget-card">
+          <h3>🔗 从链接提取AuthKey</h3>
+          <p style="margin-bottom: 15px; color: #666;">粘贴抽卡记录链接到这里提取AuthKey：</p>
+          <el-form :model="extractForm" label-width="100px">
+            <el-form-item label="抽卡链接">
+              <el-input v-model="extractForm.url" type="textarea" :rows="3" placeholder="粘贴抽卡记录链接..."></el-input>
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="extractAuthkey">提取AuthKey</el-button>
+              <el-button @click="extractForm.url = ''">清空</el-button>
+            </el-form-item>
+          </el-form>
+        </div>
+
+        <div class="widget-card">
+          <h3>ℹ️ 关于AuthKey</h3>
+          <ul style="color: #666; padding-left: 20px;">
+            <li>AuthKey 有效期约24小时，过期后需要重新获取</li>
+            <li>仅用于读取抽卡数据，不会泄露账号密码</li>
+            <li>提取后可在"导入抽卡数据"页面使用</li>
+            <li>所有数据保存在本地，不上传服务器</li>
+          </ul>
+        </div>
+      </div>
+      <div v-else-if="currentTab === 'settings'">
+        <div class="widget-card">
+          <h3> 系统设置</h3>
+          <el-divider content-position="left">数据管理</el-divider>
+
+          <div class="settings-section">
+            <h4>导出数据</h4>
+            <p style="color: #666; margin-bottom: 10px;">将所有账号的抽卡记录导出为Excel文件</p>
+            <el-button type="primary" @click="exportAllData"> 导出全部数据</el-button>
+          </div>
+
+          <el-divider content-position="left">危险操作</el-divider>
+
+          <div class="settings-section danger-zone">
+            <h4 style="color: #F56C6C;">清空所有数据</h4>
+            <p style="color: #666; margin-bottom: 10px;">此操作将删除所有账号和抽卡记录，数据无法恢复！</p>
+            <el-button type="danger" @click="confirmClearData"> 清空所有数据</el-button>
+          </div>
+
+          <el-divider content-position="left">关于</el-divider>
+
+          <div class="settings-section">
+            <h4>GachaStats </h4>
+            <p style="color: #666;">版本: 1.0.0</p>
+            <p style="color: #666;">数据存储: 本地SQLite数据库</p>
+            <p style="color: #666;">支持游戏: 原神、崩坏3、星穹铁道、绝区零</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>GachaStats  |  2026</p>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/vue.global.js"></script>
+<script src="/static/js/axios.min.js"></script>
+<script src="/static/js/element-plus.js"></script>
+<script src="/static/js/echarts.min.js"></script>
+<script src="/static/js/app-full.js"></script>
 </body>
 </html>

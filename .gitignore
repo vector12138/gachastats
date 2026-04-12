@@ -12,9 +12,11 @@ data/*.sqlite
 *.tmp
 *.temp
 *.log
+test_syntax.json
 
 # OCR模型
 models/*
+!models/.gitkeep
 
 # Python缓存
 __pycache__/
@@ -34,7 +36,9 @@ Thumbs.db
 *~
 
 # 虚拟环境
-venv/*
+venv/
+venv_temp/
+frontend/js/venv/
 
 # 临时文件
 tmp/*
