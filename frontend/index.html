@@ -28,15 +28,9 @@ body {
   </div>
 
   <div v-else class="container fade-in">
-    <div class="header page-header">
-      <h1 class="text-gradient"> GachaStats</h1>
-      <p>米哈游全游戏抽卡数据分析工具</p>
-      <div class="status-badge connection-status" :class="connectionStatus">
-        <span v-if="connectionStatus === 'success'">后端连接正常</span>
-        <span v-else-if="connectionStatus === 'error'">后端连接失败</span>
-        <span v-else>连接测试中...</span>
-      </div>
-      <button class="btn browser-login-btn" @click="currentTab = 'browser'" title="跳转到浏览器登录获取Cookie"> 获取登录Cookie</button>
+    <div class="header page-header" style="text-align: center;">
+      <h1 class="text-gradient" style="text-align: center;"> GachaStats</h1>
+      <p style="text-align: center;">米哈游全游戏抽卡数据分析工具</p>
     </div>
 
     <div class="nav-tabs page-nav-tabs">
@@ -153,6 +147,27 @@ body {
                 </el-form>
               </div>
             </el-tab-pane>
+          <el-tab-pane label="JSON文件导入" name="json">
+            <div class="form-section">
+              <p style="margin-bottom: 15px; color: #666;">从 JSON 文件导入抽卡记录，支持 wish-export、Snap Genshin 等格式。</p>
+              <el-form label-width="100px">
+                <el-form-item label="选择账号">
+                  <el-select v-model="jsonImportAccountId" placeholder="选择要导入数据的账号" style="width: 100%;">
+                    <el-option v-for="acc in accounts" :key="acc.id" :label="acc.account_name + ' (' + getGameName(acc.game_type) + ')'" :value="acc.id"></el-option>
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="选择文件">
+                  <input type="file" ref="jsonFileInput" accept=".json" @change="handleJsonFileSelect" style="display: none">
+                  <el-button type="primary" @click="$refs.jsonFileInput.click()">选择 JSON 文件</el-button>
+                  <span v-if="jsonImportFileName" style="margin-left: 10px; color: #666;">{{ jsonImportFileName }}</span>
+                </el-form-item>
+                <el-form-item>
+                  <el-button type="primary" @click="importFromJson" :loading="importing" :disabled="!jsonImportAccountId || !jsonImportFile">开始导入</el-button>
+                  <el-button @click="resetJsonImport">重置</el-button>
+                </el-form-item>
+              </el-form>
+            </div>
+          </el-tab-pane>
             <el-tab-pane label=" 手动录入" name="manual">
               <div class="form-section">
                 <p style="margin-bottom: 15px; color: #666;">手动添加单条抽卡记录，适合补充遗漏的数据。</p>
@@ -368,12 +383,20 @@ body {
       <div v-else-if="currentTab === 'settings'">
         <div class="widget-card">
           <h3> 系统设置</h3>
+          <el-divider content-position="left">系统状态</el-divider>
+          <div class="settings-section">
+            <h4>后端连接</h4>
+            <p v-if="connectionStatus === 'success'" style="color: #67C23A;">✓ 后端连接正常</p>
+            <p v-else-if="connectionStatus === 'error'" style="color: #F56C6C;">✗ 后端连接失败</p>
+            <p v-else style="color: #E6A23C;">⟳ 连接测试中...</p>
+          </div>
           <el-divider content-position="left">数据管理</el-divider>
 
           <div class="settings-section">
             <h4>导出数据</h4>
             <p style="color: #666; margin-bottom: 10px;">将所有账号的抽卡记录导出为Excel文件</p>
-            <el-button type="primary" @click="exportAllData"> 导出全部数据</el-button>
+            <el-button type="primary" @click="exportAllData"> 导出 Excel</el-button>
+            <el-button type="success" @click="exportAllJson">导出 JSON</el-button>
           </div>
 
           <el-divider content-position="left">危险操作</el-divider>
