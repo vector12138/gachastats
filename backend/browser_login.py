@@ -20,14 +20,15 @@ from .config_loader import get_login_pages
 
 def has_display() -> bool:
     """检测是否有图形界面环境"""
-    # 检查DISPLAY环境变量（Linux）
+    # 优先检查DISPLAY或WAYLAND_DISPLAY环境变量
     if os.environ.get('DISPLAY'):
-        return True
+        # 确保X11 socket文件实际存在
+        display_num = os.environ.get('DISPLAY', ':0').split(':')[1].split('.')[0]
+        x11_socket = f'/tmp/.X11-unix/X{display_num}'
+        if os.path.exists(x11_socket):
+            return True
     # 检查Wayland
     if os.environ.get('WAYLAND_DISPLAY'):
-        return True
-    # 检查 X11 socket 文件（适用于 SSH 或 DISPLAY 未设置但有显示的情况）
-    if os.path.exists('/tmp/.X11-unix/X0') or os.path.exists('/tmp/.X11-unix/X10'):
         return True
     # Windows/macOS默认有图形界面
     if os.name == 'nt' or os.name == 'posix' and os.uname().sysname == 'Darwin':
@@ -376,6 +377,14 @@ async def create_session(request: SessionRequest, background_tasks: BackgroundTa
     game_type = request.game_type
 
     logger.info(f"创建会话: {session_id} 游戏: {game_type}")
+
+    # 验证游戏类型是否支持
+    supported_games = ["genshin", "starrail", "zzz", "zenless"]
+    if game_type not in supported_games:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的游戏类型: {game_type}。支持的游戏: {', '.join(supported_games)}"
+        )
 
     # 检查浏览器环境
     if not HAS_DISPLAY:

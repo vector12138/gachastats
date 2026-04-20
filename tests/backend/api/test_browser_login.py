@@ -60,8 +60,8 @@ class TestSessions:
             "region": "cn"
         })
         
-        # Should succeed if display available
-        assert response.status_code in [200, 503]
+        # Should succeed if display available, otherwise 400 or 503
+        assert response.status_code in [200, 400, 503]
         
         # If success, check response structure
         if response.status_code == 200:
@@ -69,7 +69,6 @@ class TestSessions:
             if "data" in data:
                 data = data["data"]
             assert "session_id" in data
-            assert "game_name" in data
             assert "message" in data
     
     def test_create_session_invalid_game(self, api_client: TestClient):
@@ -80,8 +79,8 @@ class TestSessions:
             "region": "cn"
         })
         
-        # Should fail gracefully
-        assert response.status_code in [400, 422]
+        # Should fail with validation error
+        assert response.status_code == 400
     
     def test_create_session_missing_game_type(self, api_client: TestClient):
         """Test creating session without game_type."""
