@@ -4,6 +4,7 @@ import requests
 from datetime import datetime
 from fastapi import HTTPException
 from .logging_config import logger
+from .config_loader import get_api_endpoints, get_import_config
 
 
 def parse_gacha_url(url: str) -> Dict[str, str]:
@@ -20,13 +21,14 @@ def parse_gacha_url(url: str) -> Dict[str, str]:
 
 def fetch_gacha_records(game_type: str, auth_key: str, gacha_type: str, end_id: str = "0") -> List[Dict[str, Any]]:
     """Fetch gacha records from official API."""
-    base_urls = {
-        "genshin": "https://hk4e-api.mihoyo.com/event/gacha_info/api/getGachaLog",
-        "honkai3": "https://api-tachibana.mihoyo.com/event/gacha_info/api/getGachaLog",
-        "starrail": "https://api-takumi.mihoyo.com/event/gacha_info/api/getGachaLog",
-        "zzz": "https://api-takumi.mihoyo.com/event/gacha_info/api/getGachaLog",
-    }
-    base_url = base_urls.get(game_type, base_urls["genshin"])
+    # 从配置加载器获取 API 端点和导入配置（支持用户自定义）
+    base_urls = get_api_endpoints()
+    import_config = get_import_config()
+    base_url = base_urls.get(game_type, base_urls.get("genshin"))
+
+    max_pages = import_config.get("max_pages", 100)
+    page_size = import_config.get("page_size", 20)
+    timeout_seconds = import_config.get("timeout_seconds", 10)
 
     params = {
         "authkey": auth_key,
@@ -35,14 +37,13 @@ def fetch_gacha_records(game_type: str, auth_key: str, gacha_type: str, end_id: 
         "lang": "zh-cn",
         "gacha_type": gacha_type,
         "page": "1",
-        "size": "20",
+        "size": str(page_size),
         "end_id": end_id,
     }
     all_records = []
-    max_pages = 100
     for _ in range(max_pages):
         try:
-            response = requests.get(base_url, params=params, timeout=10)
+            response = requests.get(base_url, params=params, timeout=timeout_seconds)
             response.raise_for_status()
             data = response.json()
             if data.get("retcode") != 0:
@@ -52,7 +53,7 @@ def fetch_gacha_records(game_type: str, auth_key: str, gacha_type: str, end_id: 
                 break
             all_records.extend(list_data)
             params["end_id"] = list_data[-1]["id"]
-            if len(list_data) < 20:
+            if len(list_data) < page_size:
                 break
         except Exception as e:
             logger.error(f"获取抽卡记录失败: {e}")
@@ -122,7 +123,7 @@ def calculate_pity(records: List[Dict[str, Any]]) -> Dict[str, Any]:
         }
     else:
         # No 5-stars found
-        current_pity = total_pulls  # Count from the beginning
+        current_pity = total_pulls # Count from the beginning
         pity_stats = {"min": 0, "max": 0, "avg": 0}
 
     return {

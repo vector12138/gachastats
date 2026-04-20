@@ -5,9 +5,9 @@
 
 ```json
 {
-  "host": "0.0.0.0",
-  "port": 8777,
-  "reload": true
+    "host": "0.0.0.0",
+    "port": 8777,
+    "reload": true
 }
 ```
 """
@@ -19,34 +19,15 @@ import os
 if not os.environ.get('DISPLAY'):
     os.environ['DISPLAY'] = ':10'
 
-import json
-from pathlib import Path
 import uvicorn
+from backend.config_loader import get_config
 
 # ------------------- Read configuration -------------------
-CONFIG_PATH = Path(__file__).with_name("config.json")
-if not CONFIG_PATH.is_file():
-    raise FileNotFoundError(f"Missing configuration file: {CONFIG_PATH}")
+CONFIG = get_config()
 
-with CONFIG_PATH.open(encoding="utf-8") as f:
-    _raw_config = json.load(f)
-
-# 全局配置对象，供其他模块使用
-CONFIG = {
-    "host": _raw_config.get("host", "0.0.0.0"),
-    "port": _raw_config.get("port", 8777),
-    "reload": _raw_config.get("reload", False),
-    # 浏览器登录页面的游戏URL配置
-    "login_pages": _raw_config.get("login_pages", {
-        "genshin": "https://webstatic.mihoyo.com/hk4e/event/e20190909gacha-v3/index.html",
-        "zzz": "https://zzz.hoyolab.com/#/zzz/zzz/zZZ/screen_record",
-        "starrail": "https://webstatic.mihoyo.com/hkrpg/index.html"
-    })
-}
-
-HOST = CONFIG["host"]
-PORT = CONFIG["port"]
-RELOAD = CONFIG["reload"]
+HOST = CONFIG.get("host", "0.0.0.0")
+PORT = CONFIG.get("port", 8777)
+RELOAD = CONFIG.get("reload", False)
 
 # ------------------- Start the server -------------------
 if __name__ == "__main__":
