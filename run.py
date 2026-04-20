@@ -5,9 +5,9 @@
 
 ```json
 {
-    "host": "0.0.0.0",
-    "port": 8777,
-    "reload": true
+  "host": "0.0.0.0",
+  "port": 8777,
+  "reload": true
 }
 ```
 """
@@ -29,11 +29,24 @@ if not CONFIG_PATH.is_file():
     raise FileNotFoundError(f"Missing configuration file: {CONFIG_PATH}")
 
 with CONFIG_PATH.open(encoding="utf-8") as f:
-    cfg = json.load(f)
+    _raw_config = json.load(f)
 
-HOST = cfg.get("host", "0.0.0.0")
-PORT = cfg.get("port", 8777)
-RELOAD = cfg.get("reload", False)
+# 全局配置对象，供其他模块使用
+CONFIG = {
+    "host": _raw_config.get("host", "0.0.0.0"),
+    "port": _raw_config.get("port", 8777),
+    "reload": _raw_config.get("reload", False),
+    # 浏览器登录页面的游戏URL配置
+    "login_pages": _raw_config.get("login_pages", {
+        "genshin": "https://webstatic.mihoyo.com/hk4e/event/e20190909gacha-v3/index.html",
+        "zzz": "https://zzz.hoyolab.com/#/zzz/zzz/zZZ/screen_record",
+        "starrail": "https://webstatic.mihoyo.com/hkrpg/index.html"
+    })
+}
+
+HOST = CONFIG["host"]
+PORT = CONFIG["port"]
+RELOAD = CONFIG["reload"]
 
 # ------------------- Start the server -------------------
 if __name__ == "__main__":

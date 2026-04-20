@@ -16,6 +16,7 @@ from loguru import logger
 
 from .database import get_session
 from .models import Account
+from .config_loader import get_login_pages
 
 def has_display() -> bool:
     """检测是否有图形界面环境"""
@@ -98,26 +99,24 @@ class BrowserController:
         if self.playwright:
             await self.playwright.stop()
 
-    async def navigate_to_login(self, game_type: str) -> None:
-        """导航到对应的登录页面"""
-        import json
+    async def navigate_to_login(self, game_type: str, login_pages: dict = None) -> None:
+        """导航到对应的登录页面
 
-        # 读取配置
-        config = {}
-        try:
-            with open("config.json", "r", encoding="utf-8") as f:
-                config = json.load(f)
-        except Exception as e:
-            logger.warning(f"无法读取 config.json: {e}，使用默认配置")
-
-        # 从配置获取登录页面，配置缺失则使用默认值
-        login_pages = config.get("login_pages", {
+        Args:
+            game_type: 游戏类型 (genshin, zzz, starrail)
+            login_pages: 可选，游戏登录页面URL配置字典
+        """
+        # 默认配置
+        default_pages = {
             "genshin": "https://webstatic.mihoyo.com/hk4e/event/e20190909gacha-v3/index.html",
             "zzz": "https://zzz.hoyolab.com/#/zzz/zzz/zZZ/screen_record",
             "starrail": "https://webstatic.mihoyo.com/hkrpg/index.html"
-        })
+        }
 
-        url = login_pages.get(game_type)
+        # 使用传入的配置，或使用默认配置
+        pages = login_pages if login_pages else default_pages
+
+        url = pages.get(game_type)
         if not url:
             raise ValueError(f"不支持的游戏类型: {game_type}")
 
@@ -245,14 +244,20 @@ async def get_browser_status():
     }
 
 
-async def process_browser_login(game_type: str, save_account: bool):
-    """处理浏览器登录流程"""
+async def process_browser_login(game_type: str, save_account: bool, login_pages: dict = None):
+    """处理浏览器登录流程
+
+    Args:
+        game_type: 游戏类型
+        save_account: 是否保存账号
+        login_pages: 可选，游戏登录页面配置
+    """
     try:
         # 启动浏览器
         await browser_controller.start_browser(headless=False)
 
-        # 导航到登录页面
-        await browser_controller.navigate_to_login(game_type)
+        # 导航到登录页面（传入配置）
+        await browser_controller.navigate_to_login(game_type, login_pages)
 
         # 等待用户登录
         auth_info = await browser_controller.wait_for_login()
@@ -493,20 +498,31 @@ async def delete_session(session_id: str):
     }
 
 
-async def process_session_login(session_id: str, game_type: str, save_account: bool):
-    """处理会话的浏览器登录流程"""
+async def process_session_login(session_id: str, game_type: str, save_account: bool, login_pages: dict = None):
+    """处理会话的浏览器登录流程
+
+    Args:
+        session_id: 会话ID
+        game_type: 游戏类型
+        save_account: 是否保存账号
+        login_pages: 可选，游戏登录页面配置
+    """
     session = sessions.get(session_id)
     if not session:
         logger.error(f"会话 {session_id} 不存在")
         return
+
+    # 如果没有传入登录页面配置，从配置文件读取
+    if login_pages is None:
+        login_pages = get_login_pages()
 
     try:
         # 启动浏览器
         await browser_controller.start_browser(headless=False)
         session["message"] = "浏览器已启动，等待登录..."
 
-        # 导航到登录页面
-        await browser_controller.navigate_to_login(game_type)
+        # 导航到登录页面（传入配置）
+        await browser_controller.navigate_to_login(game_type, login_pages)
 
         # 等待用户登录
         auth_info = await browser_controller.wait_for_login()
