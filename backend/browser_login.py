@@ -100,13 +100,22 @@ class BrowserController:
 
     async def navigate_to_login(self, game_type: str) -> None:
         """导航到对应的登录页面"""
-        # 使用抽卡记录页面作为登录入口
-        # 用户需要先登录才能访问这些页面
-        login_pages = {
+        import json
+
+        # 读取配置
+        config = {}
+        try:
+            with open("config.json", "r", encoding="utf-8") as f:
+                config = json.load(f)
+        except Exception as e:
+            logger.warning(f"无法读取 config.json: {e}，使用默认配置")
+
+        # 从配置获取登录页面，配置缺失则使用默认值
+        login_pages = config.get("login_pages", {
             "genshin": "https://webstatic.mihoyo.com/hk4e/event/e20190909gacha-v3/index.html",
             "zzz": "https://zzz.hoyolab.com/#/zzz/zzz/zZZ/screen_record",
             "starrail": "https://webstatic.mihoyo.com/hkrpg/index.html"
-        }
+        })
 
         url = login_pages.get(game_type)
         if not url:
