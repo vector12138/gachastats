@@ -58,7 +58,7 @@ const app = createApp({
       }
       this.browserLoginLoading = true
       try {
-        const res = await axios.post('/api/auth/browser-login', {
+        const res = await axios.post('/api/auth/sessions', {
           game_type: this.browserLoginForm.game_type,
           save_account: true
         })

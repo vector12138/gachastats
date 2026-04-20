@@ -107,6 +107,11 @@ async def index() -> str:
         html = f.read()
     return html
 
+@app.get("/health")
+async def health_check():
+    """健康检查端点"""
+    return {"status": "ok", "version": "1.0.0"}
+
 # ------------------- 统一 API 响应格式 -------------------
 @app.middleware("http")
 async def unify_response(request: Request, call_next) -> JSONResponse:

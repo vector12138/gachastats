@@ -5,12 +5,19 @@
 
 ```json
 {
-  "host": "0.0.0.0",
-  "port": 8777,
-  "reload": true
+    "host": "0.0.0.0",
+    "port": 8777,
+    "reload": true
 }
 ```
 """
+
+import os
+
+# ⚠️ 关键点：必须在导入任何其他模块之前设置 DISPLAY
+# 这样 backend.browser_login 的 has_display() 才能检测到正确的环境
+if not os.environ.get('DISPLAY'):
+    os.environ['DISPLAY'] = ':10'
 
 import json
 from pathlib import Path

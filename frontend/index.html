@@ -27,11 +27,11 @@ body {
     <p>正在加载GachaStats...</p>
   </div>
 
-  <div v-else class="container fade-in">
-    <div class="header page-header" style="text-align: center;">
-      <h1 class="text-gradient" style="text-align: center;"> GachaStats</h1>
-      <p style="text-align: center;">米哈游全游戏抽卡数据分析工具</p>
-    </div>
+ <div v-else class="container fade-in">
+ <div class="header page-header" style="text-align: center; padding: 40px 0;">
+ <h1 class="text-align" style="text-align: center; font-size: 3rem; margin-bottom: 10px;"> GachaStats</h1>
+ <p style="text-align: center; font-size: 1.2rem;">米哈游全游戏抽卡数据分析工具</p>
+ </div>
 
     <div class="nav-tabs page-nav-tabs">
       <button
@@ -309,41 +309,139 @@ body {
         </div>
       </div>
 
-      <div v-else-if="currentTab === 'browser'">
-        <!-- 自动浏览器登录 - 仅在支持的环境中显示 -->
-        <div v-if="browserStatus.can_auto_login" class="widget-card">
-          <h3>🌐 自动浏览器登录</h3>
-          <p style="margin-bottom: 15px; color: #666;">选择游戏后自动打开浏览器，登录后系统会自动获取Cookie。</p>
-          <el-alert type="success" :closable="false" style="margin-bottom: 15px;">
-            <template #title>
-              ✅ 当前支持自动浏览器登录
-            </template>
-          </el-alert>
-          <el-form :model="browserLoginForm" label-width="100px">
-            <el-form-item label="选择游戏">
-              <el-select v-model="browserLoginForm.game_type" placeholder="选择游戏" style="width: 200px;">
-                <el-option label="原神" value="genshin"></el-option>
-                <el-option label="崩坏3" value="honkai"></el-option>
-                <el-option label="星穹铁道" value="starrail"></el-option>
-                <el-option label="绝区零" value="zenless"></el-option>
-              </el-select>
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" @click="startBrowserLogin" :loading="browserLoginLoading">启动浏览器登录</el-button>
-            </el-form-item>
-          </el-form>
-        </div>
+<div v-else-if="currentTab === 'browser'">
+ <!-- 自动浏览器登录弹窗 -->
+ <el-dialog
+ v-model="browserLoginDialog"
+ :title="browserLoginStep === 1 ? '开始自动登录' : browserLoginStep === 2 ? '等待登录完成...' : '输入 AuthKey'"
+ width="500px"
+ :close-on-click-modal="false"
+ :close-on-press-escape="false"
+ >
+ <!-- 步骤1: 选择游戏和服务器 -->
+ <div v-if="browserLoginStep === 1">
+ <p style="margin-bottom: 10px;">请选择游戏和服务器区域：</p>
+ 
+ <el-form label-position="left" label-width="80px">
+ <el-form-item label="游戏">
+ <el-radio-group v-model="browserLoginForm.game_type">
+ <el-radio-button label="genshin">原神</el-radio-button>
+ <el-radio-button label="starrail">星穹铁道</el-radio-button>
+ <el-radio-button label="zenless">绝区零</el-radio-button>
+ </el-radio-group>
+ </el-form-item>
+ 
+ <el-form-item label="服务器">
+ <el-radio-group v-model="browserLoginForm.region">
+ <el-radio-button label="cn">国服</el-radio-button>
+ <el-radio-button label="os">国际服</el-radio-button>
+ </el-radio-group>
+ </el-form-item>
+ </el-form>
+ 
+ <el-divider></el-divider>
+ <p style="font-size: 13px; color: #666; margin-top: 10px;">
+ 点击"开始登录"后将弹出浏览器窗口，请在窗口中完成{{ browserLoginForm.region === 'cn' ? '米哈游' : 'HoYoverse' }}账号登录。
+ </p>
+ </div>
 
-        <!-- 手动提取方式 -->
-        <div class="widget-card">
-          <h3>{{ browserStatus.can_auto_login ? '🔧 备用方式：手动获取链接' : '📱 手动获取抽卡链接' }}</h3>
-          <p v-if="!browserStatus.can_auto_login" style="margin-bottom: 15px;">
-            <el-alert type="warning" :closable="false" style="margin-bottom: 15px;">
-              <template #title>
-                ⚠️ 当前环境{{ browserStatus.has_display ? '缺少浏览器组件' : '没有图形界面' }}，请使用手动方式获取
-              </template>
-            </el-alert>
-          </p>
+<!-- 步骤2: 等待登录 -->
+<div v-else-if="browserLoginStep === 2" style="text-align: center; padding: 20px;">
+  <el-icon :size="48" class="is-loading" style="color: #409EFF; margin-bottom: 15px;"><svg class="is-loading" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="48" height="48"><path fill="currentColor" d="M784.512 230.272v-50.56a32 32 0 1 1 64 0v149.056a32 32 0 0 1-32 32H667.52a32 32 0 1 1 0-64h92.992C640.332 160.256 512.516 128 384 128 213.68 128 64 277.68 64 448c0 170.32 149.68 320 320 320 111.168 0 209.472-57.152 266.624-143.36a32 32 0 1 1 54.72 32.64C628.112 755.584 511.68 832 384 832c-212.064 0-384-171.936-384-384s171.936-384 384-384c121.888 0 231.968 56.864 303.52 144.96L784.512 230.272z"/></svg></el-icon>
+ <p style="font-size: 16px; margin-bottom: 10px;">请在新打开的浏览器窗口中完成登录...</p>
+ <p style="color: #666; font-size: 14px; margin-bottom: 20px;" v-if="browserLoginSession">
+ 会话ID: {{ browserLoginSession }}
+ </p>
+ <div style="color: #909399; font-size: 13px;">
+ <p>⏱️ 登录超时时间: 10 分钟</p>
+ <p>登录完成后系统会自动获取 authkey</p>
+ </div>
+ <el-divider></el-divider>
+ <el-button @click="cancelBrowserLogin" type="danger" plain>取消登录</el-button>
+ <el-button @click="browserLoginStep = 3" type="primary" plain>我已登录，手动输入 authkey</el-button>
+ </div>
+
+ <!-- 步骤3: 手动输入 authkey -->
+ <div v-else-if="browserLoginStep === 3">
+ <el-alert type="warning" :closable="false" style="margin-bottom: 15px;">
+ <p>请从浏览器地址栏或开发者工具中获取 authkey。</p>
+ <p>authkey 通常以 <code>authkey=</code> 开头，很长的一串加密字符串。</p>
+ </el-alert>
+ <el-form>
+ <el-form-item label="AuthKey">
+ <el-input
+ v-model="manualAuthkey"
+ type="textarea"
+ :rows="3"
+ placeholder="粘贴 authkey 到这里..."
+ ></el-input>
+ </el-form-item>
+ <el-form-item label="UID (可选)">
+ <el-input v-model="manualUid" placeholder="输入游戏 UID"></el-input>
+ </el-form-item>
+ </el-form>
+ </div>
+
+ <template #footer>
+ <div v-if="browserLoginStep === 1">
+ <el-button @click="browserLoginDialog = false">取消</el-button>
+ <el-button type="primary" @click="startBrowserLogin" :loading="browserLoginLoading">开始登录</el-button>
+ </div>
+ <div v-else-if="browserLoginStep === 3">
+ <el-button @click="browserLoginStep = 2">返回</el-button>
+ <el-button type="primary" @click="submitBrowserAuthkey" :loading="browserLoginLoading">提交</el-button>
+ </div>
+ </template>
+ </el-dialog>
+
+ <!-- 主内容：显示浏览器登录选项 -->
+ <div class="widget-card">
+ <h3>🌐 浏览器自动登录</h3>
+ <p style="margin-bottom: 15px; color: #666;">通过 Playwright 自动打开浏览器窗口，完成登录并获取抽卡数据。</p>
+ <el-alert :type="browserStatus.can_auto_login ? 'success' : 'warning'" :closable="false" style="margin-bottom: 15px;">
+ <template #title>
+ <span v-if="browserStatus.can_auto_login">✅ 当前支持浏览器登录</span>
+ <span v-else-if="!browserStatus.has_display">⚠️ 当前服务器无图形界面环境</span>
+ <span v-else-if="!browserStatus.playwright_available">⚠️ 缺少 Playwright 组件</span>
+ <span v-else>⚠️ 浏览器登录不可用</span>
+ </template>
+ </el-alert>
+ <el-form :model="browserLoginForm" label-width="100px">
+ <el-form-item label="选择游戏">
+ <el-select v-model="browserLoginForm.game_type" placeholder="选择游戏" style="width: 200px;" :disabled="!browserStatus.can_auto_login">
+ <el-option label="原神" value="genshin"></el-option>
+ <el-option label="崩坏3" value="honkai"></el-option>
+ <el-option label="星穹铁道" value="starrail"></el-option>
+ <el-option label="绝区零" value="zenless"></el-option>
+ </el-select>
+ </el-form-item>
+ <el-form-item>
+ <el-button
+ type="primary"
+ @click="browserLoginDialog = true; browserLoginStep = 1"
+ :disabled="!browserStatus.can_auto_login"
+ >打开登录窗口</el-button>
+ </el-form-item>
+ </el-form>
+ </div>
+
+ <div class="widget-card" v-if="!browserStatus.can_auto_login">
+ <h3>⚙️ 解决依赖问题</h3>
+ <div v-if="!browserStatus.has_display">
+ <p style="color: #666; margin-bottom: 10px;">当前服务器无图形界面，浏览器登录不可用。</p>
+ <p style="color: #909399; font-size: 13px;">请使用下方【手动获取抽卡链接】方式。</p>
+ </div>
+ <div v-else-if="!browserStatus.playwright_available">
+ <p style="color: #666; margin-bottom: 10px;">需要安装 Playwright 才能使用浏览器登录功能。</p>
+ <el-alert type="info" :closable="false" style="margin-bottom: 10px;">
+ <p style="font-family: monospace; font-size: 12px; margin: 0;">pip install playwright<br>playwright install chromium</p>
+ </el-alert>
+ </div>
+ </div>
+
+ <!-- 手动提取方式 -->
+ <div class="widget-card">
+ <h3>📱 手动获取抽卡链接</h3>
           <p style="margin-bottom: 15px; color: #666;">请按以下步骤手动获取抽卡链接：</p>
 
           <el-steps direction="vertical" :active="1" style="margin-bottom: 20px;">

@@ -98,15 +98,15 @@
                         return;
                     }
 
-                    // 请求新的分析数据
-                    const params = {
-                        account_id: this.dataOptions.accountId,
-                        game_type: this.dataOptions.gameType,
-                        ...this.dataOptions.dateRange
-                    };
+ // 请求新的分析数据 - 使用 RESTful 路径
+      const url = `/api/accounts/${this.dataOptions.accountId}/analysis`;
+      const params = {};
+      if (this.dataOptions.gameType) {
+        params.gacha_type = this.dataOptions.gameType;
+      }
 
-                    const response = await axios.get('/api/analysis', { params });
-                    this.analysisData = response.data;
+      const response = await axios.get(url, { params });
+      this.analysisData = response.data.data || response.data;
 
                     // 缓存数据
                     this.loadedData[cacheKey] = response.data;

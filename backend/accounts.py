@@ -55,3 +55,59 @@ async def delete_account(account_id: int, session: Session = Depends(get_session
     session.delete(account)
     session.commit()
     return {"status": "success", "message": "账号已删除"}
+
+
+@router.get("/api/accounts/{account_id}")
+async def get_account(account_id: int, session: Session = Depends(get_session)) -> Dict[str, Any]:
+    """获取单个账号详情"""
+    account = session.get(Account, account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="账号不存在")
+    return {
+        "id": account.id,
+        "game_type": account.game_type,
+        "account_name": account.account_name,
+        "server": account.server,
+        "uid": account.uid,
+        "auth_key": account.auth_key if account.auth_key else "",
+        "last_sync_time": account.last_sync_time,
+        "create_time": account.create_time,
+    }
+
+
+@router.put("/api/accounts/{account_id}")
+async def update_account(
+    account_id: int,
+    account_data: dict,
+    session: Session = Depends(get_session)
+) -> Dict[str, Any]:
+    """更新账号信息"""
+    account = session.get(Account, account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="账号不存在")
+
+    # 更新允许的字段
+    allowed_fields = ["game_type", "account_name", "server", "uid", "auth_key"]
+    for field in allowed_fields:
+        if field in account_data:
+            setattr(account, field, account_data[field])
+
+    session.add(account)
+    try:
+        session.commit()
+        session.refresh(account)
+    except Exception:
+        session.rollback()
+        raise HTTPException(status_code=400, detail="更新账号失败")
+
+    return {"status": "success", "account_id": account.id, "message": "账号更新成功"}
+
+
+@router.patch("/api/accounts/{account_id}")
+async def patch_account(
+    account_id: int,
+    account_data: dict,
+    session: Session = Depends(get_session)
+) -> Dict[str, Any]:
+    """部分更新账号信息（PATCH用于部分更新）"""
+    return await update_account(account_id, account_data, session)

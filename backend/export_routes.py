@@ -1,5 +1,5 @@
 import json
-from typing import Dict, Any
+from typing import Dict, Any, List
 from io import BytesIO
 from datetime import datetime
 from urllib.parse import quote
@@ -15,7 +15,7 @@ from .database import get_session
 router = APIRouter()
 
 
-@router.get("/api/export/{account_id}/xlsx")
+@router.get("/api/accounts/{account_id}/exports/xlsx")
 async def export_to_excel(
     account_id: int,
     session: Session = Depends(get_session)
@@ -96,7 +96,17 @@ async def export_to_excel(
     )
 
 
-@router.get("/api/export/{account_id}/csv")
+# 旧端点兼容
+@router.get("/api/export/{account_id}/xlsx", deprecated=True)
+async def export_to_excel_legacy(
+    account_id: int,
+    session: Session = Depends(get_session)
+) -> StreamingResponse:
+    """导出账号抽卡记录到 Excel 文件（旧版本）"""
+    return await export_to_excel(account_id, session)
+
+
+@router.get("/api/accounts/{account_id}/exports/csv")
 async def export_to_csv(
     account_id: int,
     session: Session = Depends(get_session)
@@ -138,12 +148,29 @@ async def export_to_csv(
     )
 
 
-@router.get("/api/export/all/xlsx")
-async def export_all_to_excel(
+# 旧端点兼容
+@router.get("/api/export/{account_id}/csv", deprecated=True)
+async def export_to_csv_legacy(
+    account_id: int,
     session: Session = Depends(get_session)
 ) -> StreamingResponse:
-    """导出所有账号的抽卡记录"""
-    accounts = session.exec(select(Account)).all()
+    """导出账号抽卡记录到 CSV 文件（旧版本）"""
+    return await export_to_csv(account_id, session)
+
+
+@router.post("/api/exports/xlsx")
+async def export_all_to_excel(
+    account_ids: List[int] = None,
+    session: Session = Depends(get_session)
+) -> StreamingResponse:
+    """导出多个账号的抽卡记录（POST支持指定账号IDs）"""
+    stmt = select(Account)
+    if account_ids:
+        stmt = stmt.where(Account.id.in_(account_ids))
+    accounts = session.exec(stmt).all()
+
+    if not accounts:
+        raise HTTPException(status_code=404, detail="没有找到可用账号")
 
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -162,8 +189,12 @@ async def export_all_to_excel(
                 data.append({
                     "抽取时间": r.time,
                     "物品名称": r.item_name,
+                    "物品类型": r.item_type,
                     "稀有度": f"{r.rarity}星",
-                    "卡池": r.gacha_name or r.gacha_type
+                    "卡池类型": r.gacha_name or r.gacha_type,
+                    "卡池代码": r.gacha_type,
+                    "是否为NEW": "是" if r.is_new else "否",
+                    "水位": r.pity
                 })
 
             df = pd.DataFrame(data)
@@ -171,7 +202,7 @@ async def export_all_to_excel(
             df.to_excel(writer, sheet_name=sheet_name, index=False)
 
     output.seek(0)
-    filename = f"GachaStats_全部账号_抽卡记录_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    filename = f"GachaStats_抽卡记录_{datetime.now().strftime('%Y%m%d')}.xlsx"
     encoded_filename = quote(filename)
 
     return StreamingResponse(
@@ -181,7 +212,16 @@ async def export_all_to_excel(
     )
 
 
-@router.get("/api/export/{account_id}/json")
+# 旧端点兼容
+@router.get("/api/export/all/xlsx", deprecated=True)
+async def export_all_to_excel_legacy(
+    session: Session = Depends(get_session)
+) -> StreamingResponse:
+    """导出所有账号的抽卡记录（旧版本）"""
+    return await export_all_to_excel(None, session)
+
+
+@router.get("/api/accounts/{account_id}/exports/json")
 async def export_to_json(
     account_id: int,
     format: str = "standard",
@@ -225,6 +265,85 @@ async def export_to_json(
         media_type="application/json",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"}
     )
+
+
+# 旧端点兼容
+@router.get("/api/export/{account_id}/json", deprecated=True)
+async def export_to_json_legacy(
+    account_id: int,
+    format: str = "standard",
+    session: Session = Depends(get_session)
+) -> StreamingResponse:
+    """导出账号抽卡记录到 JSON 文件（旧版本）"""
+    return await export_to_json(account_id, format, session)
+
+
+@router.post("/api/exports/json")
+async def export_all_to_json(
+    account_ids: List[int] = None,
+    format: str = "standard",
+    session: Session = Depends(get_session)
+) -> StreamingResponse:
+    """导出所有/指定账号的抽卡记录为 JSON"""
+    stmt = select(Account)
+    if account_ids:
+        stmt = stmt.where(Account.id.in_(account_ids))
+    accounts = session.exec(stmt).all()
+
+    all_data = {"accounts": []}
+
+    for account in accounts:
+        records = session.exec(
+            select(GachaRecord)
+            .where(GachaRecord.account_id == account.id)
+            .order_by(GachaRecord.time.desc())
+        ).all()
+
+        if not records:
+            continue
+
+        account_data = {
+            "uid": account.uid,
+            "game_type": account.game_type,
+            "account_name": account.account_name,
+            "records": [
+                {
+                    "time": r.time,
+                    "item_name": r.item_name,
+                    "item_type": r.item_type,
+                    "rarity": r.rarity,
+                    "gacha_type": r.gacha_type,
+                    "gacha_name": r.gacha_name,
+                    "pity": r.pity,
+                    "is_new": r.is_new
+                }
+                for r in records
+            ]
+        }
+        all_data["accounts"].append(account_data)
+
+    output = BytesIO()
+    output.write(json.dumps(all_data, ensure_ascii=False, indent=2).encode('utf-8'))
+    output.seek(0)
+
+    filename = f"GachaStats_全部账号_抽卡记录_{datetime.now().strftime('%Y%m%d')}.json"
+    encoded_filename = quote(filename)
+
+    return StreamingResponse(
+        output,
+        media_type="application/json",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"}
+    )
+
+
+# 旧端点兼容
+@router.get("/api/export/all/json", deprecated=True)
+async def export_all_to_json_legacy(
+    format: str = "standard",
+    session: Session = Depends(get_session)
+) -> StreamingResponse:
+    """导出所有账号的抽卡记录为 JSON（旧版本）"""
+    return await export_all_to_json(None, format, session)
 
 
 def _export_standard_format(records: list, account: Account) -> Dict[str, Any]:
@@ -298,56 +417,3 @@ def _export_snap_genshin_format(records: list, account: Account) -> Dict[str, An
             for idx, r in enumerate(records)
         ]
     }
-
-
-@router.get("/api/export/all/json")
-async def export_all_to_json(
-    format: str = "standard",
-    session: Session = Depends(get_session)
-) -> StreamingResponse:
-    """导出所有账号的抽卡记录为 JSON"""
-    accounts = session.exec(select(Account)).all()
-    all_data = {"accounts": []}
-
-    for account in accounts:
-        records = session.exec(
-            select(GachaRecord)
-            .where(GachaRecord.account_id == account.id)
-            .order_by(GachaRecord.time.desc())
-        ).all()
-
-        if not records:
-            continue
-
-        account_data = {
-            "uid": account.uid,
-            "game_type": account.game_type,
-            "account_name": account.account_name,
-            "records": [
-                {
-                    "time": r.time,
-                    "item_name": r.item_name,
-                    "item_type": r.item_type,
-                    "rarity": r.rarity,
-                    "gacha_type": r.gacha_type,
-                    "gacha_name": r.gacha_name,
-                    "pity": r.pity,
-                    "is_new": r.is_new
-                }
-                for r in records
-            ]
-        }
-        all_data["accounts"].append(account_data)
-
-    output = BytesIO()
-    output.write(json.dumps(all_data, ensure_ascii=False, indent=2).encode('utf-8'))
-    output.seek(0)
-
-    filename = f"GachaStats_全部账号_抽卡记录_{datetime.now().strftime('%Y%m%d')}.json"
-    encoded_filename = quote(filename)
-
-    return StreamingResponse(
-        output,
-        media_type="application/json",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"}
-    )

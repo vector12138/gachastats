@@ -1,4 +1,8 @@
-"""Planning routes for GachaStats - provides gacha planning recommendations."""
+"""Planning routes for GachaStats - provides gacha planning recommendations.
+
+基于RESTful规范:
+- /api/accounts/{account_id}/planning/* - 账号规划子资源
+"""
 from typing import Dict, Any, List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
@@ -10,7 +14,71 @@ from .database import get_session
 router = APIRouter()
 
 
-@router.get("/api/planning/{account_id}")
+@router.get("/api/accounts/{account_id}/planning/summary")
+async def get_planning_summary(
+    account_id: int,
+    session: Session = Depends(get_session)
+) -> Dict[str, Any]:
+    """获取规划汇总"""
+    account = session.get(Account, account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="账号不存在")
+    return {
+        "status": "success",
+        "data": {
+            "account_id": account_id,
+            "game_type": account.game_type,
+            "account_name": account.account_name,
+            "historical_avg_pity": 0,
+            "current_pity_status": {},
+            "recommendations": [],
+            "saving_plan": {}
+        }
+    }
+
+
+# 旧端点兼容
+@router.get("/api/planning/{account_id}/summary", deprecated=True)
+async def get_planning_summary_legacy(
+    account_id: int,
+    session: Session = Depends(get_session)
+) -> Dict[str, Any]:
+    """获取规划汇总（旧版本）"""
+    return await get_planning_summary(account_id, session)
+
+
+@router.post("/api/accounts/{account_id}/planning/target")
+async def set_planning_target(
+    account_id: int,
+    target: dict,
+    session: Session = Depends(get_session)
+) -> Dict[str, Any]:
+    """设置目标"""
+    account = session.get(Account, account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="账号不存在")
+    return {
+        "status": "success",
+        "data": {
+            "account_id": account_id,
+            "target": target,
+            "message": "目标设置成功"
+        }
+    }
+
+
+# 旧端点兼容
+@router.post("/api/planning/{account_id}/target", deprecated=True)
+async def set_planning_target_legacy(
+    account_id: int,
+    target: dict,
+    session: Session = Depends(get_session)
+) -> Dict[str, Any]:
+    """设置目标（旧版本）"""
+    return await set_planning_target(account_id, target, session)
+
+
+@router.get("/api/accounts/{account_id}/planning/recommendations")
 async def get_planning_recommendations(
     account_id: int,
     session: Session = Depends(get_session)
@@ -58,6 +126,16 @@ async def get_planning_recommendations(
             "next_legendary_probability": calculate_next_probabilities(pool_analysis)
         }
     }
+
+
+# 旧端点兼容
+@router.get("/api/planning/{account_id}", deprecated=True)
+async def get_planning_recommendations_legacy(
+    account_id: int,
+    session: Session = Depends(get_session)
+) -> Dict[str, Any]:
+    """基于历史数据提供抽卡策略建议（旧版本）"""
+    return await get_planning_recommendations(account_id, session)
 
 
 def analyze_by_pool(records: List[GachaRecord]) -> Dict[str, Any]:

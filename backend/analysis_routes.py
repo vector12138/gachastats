@@ -1,4 +1,8 @@
-"""Analysis routes for GachaStats."""
+"""Analysis routes for GachaStats.
+
+基于RESTful规范的账号分析端点:
+- accounts/{account_id}/analysis - 子资源形式
+"""
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
@@ -9,7 +13,7 @@ from .database import get_session
 router = APIRouter()
 
 
-@router.get("/api/analysis/{account_id}")
+@router.get("/api/accounts/{account_id}/analysis")
 async def get_analysis(
     account_id: int,
     gacha_type: Optional[str] = None,
@@ -111,7 +115,18 @@ async def get_analysis(
     return {"status": "success", "data": analysis}
 
 
-@router.get("/api/statistics/all")
+# 保持旧端点向后兼容（将在未来版本中移除）
+@router.get("/api/analysis/{account_id}", deprecated=True)
+async def get_analysis_legacy(
+    account_id: int,
+    gacha_type: Optional[str] = None,
+    session: Session = Depends(get_session)
+) -> Dict[str, Any]:
+    """获取抽卡分析报告（旧版本，请使用 /api/accounts/{account_id}/analysis）"""
+    return await get_analysis(account_id, gacha_type, session)
+
+
+@router.get("/api/statistics")
 async def get_all_statistics(session: Session = Depends(get_session)) -> Dict[str, Any]:
     """获取所有账号的统计对比"""
     accounts = session.exec(select(Account)).all()
@@ -131,3 +146,10 @@ async def get_all_statistics(session: Session = Depends(get_session)) -> Dict[st
             "five_star_rate": round(rate, 2)
         })
     return {"status": "success", "data": result}
+
+
+# 保持旧端点向后兼容
+@router.get("/api/statistics/all", deprecated=True)
+async def get_all_statistics_legacy(session: Session = Depends(get_session)) -> Dict[str, Any]:
+    """获取所有账号的统计对比（旧版本，请使用 /api/statistics）"""
+    return await get_all_statistics(session)

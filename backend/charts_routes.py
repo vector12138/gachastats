@@ -1,4 +1,9 @@
-"""Chart data routes for GachaStats - provides data for ECharts visualization."""
+"""Chart data routes for GachaStats - provides data for ECharts visualization.
+
+基于RESTful规范:
+- /api/accounts/{account_id}/charts/* - 账号图表子资源
+- /api/charts/all/* - 全局图表（无特定账号）
+"""
 from typing import Dict, Any, List
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -12,7 +17,7 @@ from .database import get_session
 router = APIRouter()
 
 
-@router.get("/api/charts/{account_id}/trend")
+@router.get("/api/accounts/{account_id}/charts/trend")
 async def get_trend_chart(
     account_id: int,
     days: int = 90,
@@ -73,7 +78,18 @@ async def get_trend_chart(
     }
 
 
-@router.get("/api/charts/{account_id}/pity-distribution")
+# 旧端点兼容（已废弃）
+@router.get("/api/charts/{account_id}/trend", deprecated=True)
+async def get_trend_chart_legacy(
+    account_id: int,
+    days: int = 90,
+    session: Session = Depends(get_session)
+) -> Dict[str, Any]:
+    """获取抽卡趋势数据（旧版本，请使用 /api/accounts/{account_id}/charts/trend）"""
+    return await get_trend_chart(account_id, days, session)
+
+
+@router.get("/api/accounts/{account_id}/charts/pity-distribution")
 async def get_pity_distribution(
     account_id: int,
     session: Session = Depends(get_session)
@@ -138,7 +154,17 @@ async def get_pity_distribution(
     }
 
 
-@router.get("/api/charts/{account_id}/item-types")
+# 旧端点兼容
+@router.get("/api/charts/{account_id}/pity-distribution", deprecated=True)
+async def get_pity_distribution_legacy(
+    account_id: int,
+    session: Session = Depends(get_session)
+) -> Dict[str, Any]:
+    """获取五星出货分布（旧版本）"""
+    return await get_pity_distribution(account_id, session)
+
+
+@router.get("/api/accounts/{account_id}/charts/item-types")
 async def get_item_types(
     account_id: int,
     session: Session = Depends(get_session)
@@ -171,7 +197,17 @@ async def get_item_types(
     }
 
 
-@router.get("/api/charts/{account_id}/monthly")
+# 旧端点兼容
+@router.get("/api/charts/{account_id}/item-types", deprecated=True)
+async def get_item_types_legacy(
+    account_id: int,
+    session: Session = Depends(get_session)
+) -> Dict[str, Any]:
+    """获取物品类型分布（旧版本）"""
+    return await get_item_types(account_id, session)
+
+
+@router.get("/api/accounts/{account_id}/charts/monthly")
 async def get_monthly_stats(
     account_id: int,
     months: int = 12,
@@ -225,11 +261,22 @@ async def get_monthly_stats(
     }
 
 
+# 旧端点兼容
+@router.get("/api/charts/{account_id}/monthly", deprecated=True)
+async def get_monthly_stats_legacy(
+    account_id: int,
+    months: int = 12,
+    session: Session = Depends(get_session)
+) -> Dict[str, Any]:
+    """获取月度统计（旧版本）"""
+    return await get_monthly_stats(account_id, months, session)
+
+
 @router.get("/api/charts/all/radar")
 async def get_all_accounts_radar(
     session: Session = Depends(get_session)
 ) -> Dict[str, Any]:
-    """获取所有账号对比（雷达图）"""
+    """获取所有账号对比（雷达图） - 无需特定账号ID"""
     accounts = session.exec(select(Account)).all()
 
     indicators = [
