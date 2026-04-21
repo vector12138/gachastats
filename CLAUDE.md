@@ -79,10 +79,11 @@ SQLite database stored in `data/gachastats.db` with SQLModel ORM. Database table
 - GameData: Game item metadata
 
 ### Key Configurations
-- `config.json`: Server host/port configuration
-- `backend/logging_config.py`: 统一日志配置（使用loguru）
-- `backend/tests/`: 测试目录
-- `config.json`: 服务器配置
+- `config.json`: 完整配置（服务器、数据库、日志、浏览器、导入等）
+- `config.example.json`: 配置模板（带所有可配置项注释）
+- `backend/config_loader.py`: 配置加载模块（支持默认值、缓存、深度合并）
+- `backend/logging_config.py`: 统一日志配置（使用loguru，支持配置化）
+- `backend/database.py`: 数据库配置（支持自定义路径）
 - `run.py`: 启动脚本
 
 ### Route Modules

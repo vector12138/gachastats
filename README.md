@@ -81,7 +81,54 @@ gachastats/
 └── README.md                # 说明文档
 ```
 ## 🔧 配置说明
-默认端口是8777，需要修改的话编辑 `main.py` 最后一行的port参数即可。
+
+项目使用 `config.json` 进行配置，可从 `config.example.json` 复制：
+
+```bash
+cp config.example.json config.json
+```
+
+### 常用配置项
+
+```json
+{
+    "host": "0.0.0.0",
+    "port": 8777,
+    "reload": false,
+    
+    "database": {
+        "path": null
+    },
+    
+    "logging": {
+        "level": "INFO",
+        "directory": null,
+        "max_size_mb": 10,
+        "retention_days": 7
+    },
+    
+    "browser": {
+        "headless": false,
+        "timeout_seconds": 300
+    }
+}
+```
+
+### 配置项说明
+
+| 配置项 | 类型 | 说明 |
+|--------|------|------|
+| `host` | string | 服务器监听地址 |
+| `port` | int | 服务器端口 |
+| `database.path` | string/null | 数据库路径，null=使用 ~/.local/gachastats/ |
+| `logging.level` | string | 日志级别 (DEBUG/INFO/WARNING/ERROR) |
+| `logging.directory` | string/null | 日志目录，null=使用项目目录/logs |
+| `login_pages` | object | 各游戏登录页面URL（可自定义） |
+| `api_endpoints` | object | 米哈游API端点（可自定义） |
+| `browser.headless` | bool | 浏览器是否无头模式 |
+| `browser.timeout_seconds` | int | 浏览器登录超时时间 |
+
+完整的配置选项请参考 `config.example.json`。
 ## 💡 使用小技巧
 1. **定期同步**：建议抽完卡后定期同步数据，保证分析准确
 2. **多设备访问**：手机和电脑在同一局域网下都能访问使用
